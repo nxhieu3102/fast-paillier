@@ -1,7 +1,7 @@
 //! Various utilities
 
 use std::fmt;
-
+use curv::{arithmetic::Converter, BigInt};
 use rand_core::RngCore;
 use rug::{Assign, Complete, Integer};
 
@@ -234,4 +234,16 @@ mod test {
             assert_eq!(&prime, rug::Integer::ONE);
         }
     }
+}
+
+/// Converts a BigInt from curv to a rug Integer
+pub fn bigint_to_integer(bigint: BigInt) -> Integer {
+    let bytes = bigint.to_bytes();
+    Integer::from_digits(bytes.as_slice(), rug::integer::Order::MsfBe)
+}
+
+/// Converts a rug Integer to a curv BigInt
+pub fn integer_to_bigint(integer: Integer) -> BigInt {
+    let bytes = integer.to_digits(rug::integer::Order::MsfBe);
+    BigInt::from_bytes(&bytes)
 }

@@ -12,6 +12,7 @@ use std::fmt;
 
 use rand_core::{CryptoRng, RngCore};
 use rug::Integer;
+use once_cell::sync::Lazy;
 
 /// Paillier ciphertext
 pub type Ciphertext = Integer;
@@ -234,3 +235,6 @@ impl<'a> fmt::Debug for dyn AnyEncryptionKey + 'a {
             .finish_non_exhaustive()
     }
 }
+
+/// The alpha size constant (2048) used for key generation
+pub static ALPHA_SIZE_2048: Lazy<Integer> = Lazy::new(|| Integer::from(2048));
