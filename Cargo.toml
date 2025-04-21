@@ -11,7 +11,7 @@ keywords = ["paillier", "public-key", "encryption"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rug = { version = "1.24", default-features = false, features = ["std", "integer", "rand"] }
+rug = { version = "1.27", default-features = false, features = ["std", "integer", "rand"] }
 kzen-paillier = { git = "https://github.com/nxhieu3102/rust-paillier" }
 curv-kzen = { git = "https://github.com/nxhieu3102/curv-kzen"}
 
