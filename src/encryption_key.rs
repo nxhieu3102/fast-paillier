@@ -3,16 +3,29 @@ use rug::{Complete, Integer};
 
 use crate::{utils, Ciphertext, Nonce, Plaintext};
 use crate::{Bug, Error, Reason};
-use kzen_paillier::optimized_paillier::{Decrypt, DecryptionKey as OptimizedDecryptionKey, EncryptionKey as OptimizedEncryptionKey, KeyGeneration, NGen, OptimizedPaillier, RawCiphertext, RawPlaintext, Encrypt};
+use kzen_paillier::optimized_paillier::{
+    Decrypt, DecryptionKey as OptimizedDecryptionKey, Encrypt,
+    EncryptionKey as OptimizedEncryptionKey, KeyGeneration, NGen, OptimizedPaillier, RawCiphertext,
+    RawPlaintext,
+};
 
 /// Paillier encryption key
 #[derive(Clone)]
 pub struct EncryptionKey {
-    n: Integer,
-    nn: Integer,
-    half_n: Integer,
-    neg_half_n: Integer,
-    optimized_ek: OptimizedEncryptionKey,
+    /// n = q * p
+    pub n: Integer,
+
+    /// nn = n * n
+    pub nn: Integer,
+
+    /// half_n = n >> 1u32
+    pub half_n: Integer,
+
+    /// neg_half_n = - half_n
+    pub neg_half_n: Integer,
+
+    /// addtional info of optimized paillier ek
+    pub optimized_ek: OptimizedEncryptionKey,
 }
 
 impl std::fmt::Debug for EncryptionKey {
@@ -32,7 +45,8 @@ impl EncryptionKey {
         let nn = n.clone() * &n;
         let half_n = n.clone() >> 1u32;
         let neg_half_n = -half_n.clone();
-        let optimized_ek = OptimizedEncryptionKey::from_n(utils::integer_to_bigint(n.clone()), 2048);
+        let optimized_ek =
+            OptimizedEncryptionKey::from_n(utils::integer_to_bigint(n.clone()), 2048);
         Self {
             n,
             nn,
@@ -179,7 +193,7 @@ mod tests {
         let ek = setup();
         let mut rng = DevRng::new();
         let plaintext: Integer = Integer::from(5);
-        
+
         let (ciphertext, _nonce) = ek.encrypt_with_random(&mut rng, &plaintext).unwrap();
         assert_ne!(ciphertext, plaintext);
     }
@@ -188,13 +202,13 @@ mod tests {
     fn test_homomorphic_add() {
         let ek = setup();
         let mut rng = DevRng::new();
-        
+
         let p1 = Integer::from(3);
         let p2 = Integer::from(4);
-        
+
         let (c1, _) = ek.encrypt_with_random(&mut rng, &p1).unwrap();
         let (c2, _) = ek.encrypt_with_random(&mut rng, &p2).unwrap();
-        
+
         let c_sum = ek.oadd(&c1, &c2).unwrap();
         assert_ne!(c_sum, c1);
         assert_ne!(c_sum, c2);
@@ -204,10 +218,10 @@ mod tests {
     fn test_homomorphic_mul() {
         let ek = setup();
         let mut rng = DevRng::new();
-        
+
         let plaintext = Integer::from(5);
         let scalar = Integer::from(3);
-        
+
         let (ciphertext, _) = ek.encrypt_with_random(&mut rng, &plaintext).unwrap();
         let result = ek.omul(&scalar, &ciphertext).unwrap();
         assert_ne!(result, ciphertext);
@@ -217,10 +231,10 @@ mod tests {
     fn test_homomorphic_neg() {
         let ek = setup();
         let mut rng = DevRng::new();
-        
+
         let plaintext = Integer::from(5);
         let (ciphertext, _) = ek.encrypt_with_random(&mut rng, &plaintext).unwrap();
-        
+
         let neg = ek.oneg(&ciphertext).unwrap();
         assert_ne!(neg, ciphertext);
     }
@@ -229,7 +243,7 @@ mod tests {
     fn test_in_signed_group() {
         let ek = setup();
         let half_n = ek.half_n();
-        
+
         assert!(ek.in_signed_group(half_n));
         assert!(ek.in_signed_group(&Integer::from(0)));
         assert!(!ek.in_signed_group(&(half_n + Integer::from(1))));

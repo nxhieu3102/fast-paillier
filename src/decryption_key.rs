@@ -3,27 +3,37 @@ use rug::{Complete, Integer};
 
 use crate::{utils, Ciphertext, EncryptionKey, Nonce, Plaintext};
 use crate::{Error, Reason};
-use kzen_paillier::optimized_paillier::{Decrypt, DecryptionKey as OptimizedDecryptionKey, EncryptionKey as OptimizedEncryptionKey, KeyGeneration, NGen, OptimizedPaillier, RawCiphertext, RawPlaintext, Encrypt};
+use kzen_paillier::optimized_paillier::{
+    Decrypt, DecryptionKey as OptimizedDecryptionKey, Encrypt,
+    EncryptionKey as OptimizedEncryptionKey, KeyGeneration, NGen, OptimizedPaillier, RawCiphertext,
+    RawPlaintext,
+};
 /// Paillier decryption key
 #[derive(Clone)]
 pub struct DecryptionKey {
-    ek: EncryptionKey,
+    /// paillier encryption key (scheme 1)
+    pub ek: EncryptionKey,
     /// `lcm(p-1, q-1)`
-    lambda: Integer,
+    pub lambda: Integer,
     /// `lambda^-1 mod N`
-    mu: Integer,
+    pub mu: Integer,
 
-    p: Integer,
-    q: Integer,
-    
-    crt_mod_nn: utils::CrtExp,
+    /// private prime
+    pub p: Integer,
+    /// private prime
+    pub q: Integer,
+
+    /// Chinese remainder for fast decryption
+    pub crt_mod_nn: utils::CrtExp,
     /// Calculates `x ^ N mod N^2`. It's used for faster encryption
-    exp_n: utils::Exponent,
+    pub exp_n: utils::Exponent,
     /// Calculates `x ^ lambda mod N^2`. It's used for faster decryption
-    exp_lambda: utils::Exponent,
+    pub exp_lambda: utils::Exponent,
 
-    optimized_dk: OptimizedDecryptionKey,
-    optimized_ek: OptimizedEncryptionKey,
+    /// additional info for optimized paillier dk
+    pub optimized_dk: OptimizedDecryptionKey,
+    /// additional info for optimized paillier ek
+    pub optimized_ek: OptimizedEncryptionKey,
 }
 
 impl DecryptionKey {
@@ -50,23 +60,13 @@ impl DecryptionKey {
         let crt_mod_nn = utils::CrtExp::build_nn(&p, &q).ok_or(Reason::BuildFastExp)?;
         let exp_n = crt_mod_nn.prepare_exponent(ek.n());
         let exp_lambda = crt_mod_nn.prepare_exponent(&lambda);
-        
-        let optimized_dk = OptimizedDecryptionKey::new(
-            dk.p.clone(),
-            dk.q.clone(),
-            dk.alpha.clone(),
-            dk.n.clone()
-        );
-        
-    
-        let optimized_ek = OptimizedEncryptionKey::new(
-            2048, 
-            _ek.n.clone(),
-            _ek.h.clone(),
-            _ek.hn.clone()
-        );
-        
-        
+
+        let optimized_dk =
+            OptimizedDecryptionKey::new(dk.p.clone(), dk.q.clone(), dk.alpha.clone(), dk.n.clone());
+
+        let optimized_ek =
+            OptimizedEncryptionKey::new(2048, _ek.n.clone(), _ek.h.clone(), _ek.hn.clone());
+
         Ok(Self {
             ek,
             lambda,
@@ -79,7 +79,6 @@ impl DecryptionKey {
             optimized_dk,
             optimized_ek,
         })
-    
     }
 
     /// Constructs a paillier key from primes `p`, `q`
@@ -108,8 +107,12 @@ impl DecryptionKey {
         let exp_n = crt_mod_nn.prepare_exponent(ek.n());
         let exp_lambda = crt_mod_nn.prepare_exponent(&lambda);
 
-        let (_ek, dk) = NGen::keys_with_primes(&utils::integer_to_bigint(p.clone()), &utils::integer_to_bigint(q.clone()), 2048).unwrap();
-        
+        let (_ek, dk) = NGen::keys_with_primes(
+            &utils::integer_to_bigint(p.clone()),
+            &utils::integer_to_bigint(q.clone()),
+            2048,
+        )
+        .unwrap();
 
         Ok(Self {
             ek,
@@ -132,7 +135,8 @@ impl DecryptionKey {
         }
         let _c = RawCiphertext::new(utils::integer_to_bigint(c.clone()));
         let plaintext = OptimizedPaillier::decrypt(&self.optimized_dk, _c);
-        let plaintext_integer = utils::bigint_to_integer(RawPlaintext::to_bigint(&plaintext.clone()));
+        let plaintext_integer =
+            utils::bigint_to_integer(RawPlaintext::to_bigint(&plaintext.clone()));
         Ok(plaintext_integer)
     }
 
@@ -149,7 +153,7 @@ impl DecryptionKey {
         let plt_as_u64 = x.to_u64().ok_or(Reason::Encrypt)?;
         let ciphertext = OptimizedPaillier::encrypt(&self.optimized_ek, plt_as_u64);
         let ciphertext_integer = utils::bigint_to_integer(ciphertext.raw.clone());
-        
+
         Ok(ciphertext_integer)
     }
 
@@ -242,7 +246,7 @@ mod tests {
         let dk = setup();
         let mut rng = DevRng::new();
         let plaintext = Integer::from(5);
-        
+
         let (ciphertext, _) = dk.encrypt_with_random(&mut rng, &plaintext).unwrap();
         let decrypted = dk.decrypt(&ciphertext).unwrap();
         assert_eq!(decrypted, plaintext);
@@ -253,13 +257,13 @@ mod tests {
         let dk = setup();
         let ek = dk.encryption_key();
         let mut rng = DevRng::new();
-        
+
         let p1 = Integer::from(3);
         let p2 = Integer::from(4);
-        
+
         let (c1, _) = dk.encrypt_with_random(&mut rng, &p1).unwrap();
         let (c2, _) = dk.encrypt_with_random(&mut rng, &p2).unwrap();
-        
+
         let c_sum = ek.oadd(&c1, &c2).unwrap();
         let decrypted = dk.decrypt(&c_sum).unwrap();
         assert_eq!(decrypted, p1 + p2);
@@ -269,10 +273,10 @@ mod tests {
     fn test_homomorphic_mul() {
         let dk = setup();
         let mut rng = DevRng::new();
-        
+
         let plaintext = Integer::from(5);
         let scalar = Integer::from(3);
-        
+
         let (ciphertext, _) = dk.encrypt_with_random(&mut rng, &plaintext).unwrap();
         let result = dk.omul(&scalar, &ciphertext).unwrap();
         let decrypted = dk.decrypt(&result).unwrap();
@@ -284,10 +288,10 @@ mod tests {
         let dk = setup();
         let ek = dk.encryption_key();
         let mut rng = DevRng::new();
-        
+
         let plaintext = Integer::from(5);
         let (ciphertext, _) = dk.encrypt_with_random(&mut rng, &plaintext).unwrap();
-        
+
         let neg = ek.oneg(&ciphertext).unwrap();
         let decrypted = dk.decrypt(&neg).unwrap();
         assert_eq!(decrypted, -plaintext);
@@ -297,7 +301,7 @@ mod tests {
     fn test_key_generation() {
         let mut rng = DevRng::new();
         let dk = DecryptionKey::generate(&mut rng).unwrap();
-        
+
         // Test basic encryption/decryption with generated key
         let plaintext = Integer::from(42);
         let (ciphertext, _) = dk.encrypt_with_random(&mut rng, &plaintext).unwrap();
