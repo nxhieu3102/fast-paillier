@@ -49,6 +49,65 @@ pub fn sample_in_mult_group(rng: &mut impl RngCore, n: &Integer) -> Integer {
     }
 }
 
+/// Samples an odd integer with size = bits
+pub fn sample_odd_with_size(rng: &mut impl RngCore, bits: u32) -> Integer {
+    let mut rng = external_rand(rng);
+    let mut x = Integer::new();
+
+    x.assign(Integer::random_bits(bits, &mut rng));
+
+    // make sure the number size is `bits`
+    x.set_bit(bits - 1, true);
+
+    // make sure the number is odd
+    x.set_bit(0, true);
+
+    x
+}
+
+/// Check if `x` is a safe prime
+pub fn is_safe_prime(x: &Integer) -> bool {
+    use rug::integer::IsPrime;
+
+    let mut x = x.clone();
+
+    // make sure the number is odd
+    if x.is_even() {
+        return false;
+    }
+
+    // make sure x does not divide any of the small primes
+    for &small_prime in &small_primes::SMALL_PRIMES[0..small_primes::SMALL_PRIMES.len()] {
+        let mod_result = x.mod_u(small_prime);
+        if mod_result == (small_prime - 1) / 2 {
+            return false;
+        }
+    }
+
+    // 25 taken same as one used in mpz_nextprime
+    if let IsPrime::Yes | IsPrime::Probably = x.is_probably_prime(25) {
+        x <<= 1;
+        x += 1;
+        if let IsPrime::Yes | IsPrime::Probably = x.is_probably_prime(25) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/// Validate aech pair of elements in vector is coprime
+pub fn check_coprime(v: &[&Integer]) -> bool {
+    for i in 0..v.len() {
+        for j in (i + 1)..v.len() {
+            if v[i].gcd_ref(v[j]).complete() != *Integer::ONE {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 /// Generates a random safe prime
 pub fn generate_safe_prime(rng: &mut impl RngCore, bits: u32) -> Integer {
     sieve_generate_safe_primes(rng, bits, 135)
@@ -224,6 +283,9 @@ impl fmt::Debug for Exponent {
 
 #[cfg(test)]
 mod test {
+    use rug::Integer;
+    use std::vec;
+
     #[test]
     fn safe_prime_size() {
         let mut rng = rand_dev::DevRng::new();
@@ -233,5 +295,35 @@ mod test {
             prime >>= size - 1;
             assert_eq!(&prime, rug::Integer::ONE);
         }
+    }
+
+    #[test]
+    fn sample_odd_with_size() {
+        let mut rng = rand_dev::DevRng::new();
+        for size in [799, 1279, 3455] {
+            let odd = super::sample_odd_with_size(&mut rng, size);
+
+            // make sure the number size is `bits`
+            // rug doesn't have bit length operations, so
+            let most_bit = odd.clone() >> (size - 1);
+            assert_eq!(&most_bit, rug::Integer::ONE);
+
+            // make sure the number is odd
+            assert_eq!(odd.is_odd(), true);
+        }
+    }
+
+    #[test]
+    fn test_coprime() {
+        let a = Integer::from(3);
+        let b = Integer::from(4);
+        let c = Integer::from(5);
+        let vec = vec![&a, &b, &c];
+
+        assert_eq!(super::check_coprime(&vec), true);
+
+        let d = Integer::from(6);
+        let vec = vec![&a, &b, &c, &d];
+        assert_eq!(super::check_coprime(&vec), false);
     }
 }

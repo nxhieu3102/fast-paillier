@@ -7,24 +7,79 @@ use crate::{Bug, Error, Reason};
 /// Paillier encryption key
 #[derive(Clone, Debug)]
 pub struct EncryptionKey {
+    /// n size (number bits of n)
+    n_size: u32,
+
+    /// alpha size in decryption key
+    a_size: u32,
+
+    /// nounce (random) in encryption have size 2*a_size
+    nounce_size: u32,
+
+    /// generator of nounce space (G)
+    /// h = -y^(2*beta) mod n
+    h: Integer,
+
+    /// n = q * p (q,p are primes)
     n: Integer,
+
+    /// nn = n * n
+    /// modulo in Paillier scheme
     nn: Integer,
+
+    /// h_pow_n = (h^n) mod nn
+    /// a constant in encryption
+    h_pow_n: Integer,
+
+    /// half_n = n / 2
+    /// use in validate plaintext (-n/2 <= p <= n/2)
     half_n: Integer,
+
+    /// neg_half_n = - (n / 2)
+    /// use in validate plaintext (-n/2 <= p <= n/2)
     neg_half_n: Integer,
 }
 
 impl EncryptionKey {
-    /// Constructs an encryption key from `N`
-    pub fn from_n(n: Integer) -> Self {
+    /// Constructs an encryption key
+    pub fn new(n_size: u32, a_size: u32, h: Integer, n: Integer) -> Result<Self, Error> {
+        let nounce_size = a_size * 2;
         let nn = n.clone() * &n;
         let half_n = n.clone() >> 1u32;
         let neg_half_n = -half_n.clone();
-        Self {
+        let h_pow_n = h.clone().pow_mod(&n, &nn).map_err(|_| Bug::PowModUndef)?;
+
+        Ok(Self {
+            n_size,
+            a_size,
+            nounce_size,
+            h,
             n,
             nn,
+            h_pow_n,
             half_n,
             neg_half_n,
-        }
+        })
+    }
+
+    /// Returns `n_size`
+    pub fn n_size(&self) -> u32 {
+        self.n_size
+    }
+
+    /// Returns `a_size`
+    pub fn a_size(&self) -> u32 {
+        self.a_size
+    }
+
+    /// Returns `nounce_size`
+    pub fn nounce_size(&self) -> u32 {
+        self.nounce_size
+    }
+
+    /// Returns `h`
+    pub fn h(&self) -> &Integer {
+        &self.h
     }
 
     /// Returns `N`
@@ -37,11 +92,23 @@ impl EncryptionKey {
         &self.nn
     }
 
+    /// Returns `h^N mod N^2`
+    pub fn h_pow_n(&self) -> &Integer {
+        &self.h_pow_n
+    }
+
     /// Returns `N/2`
     pub fn half_n(&self) -> &Integer {
         &self.half_n
     }
 
+    /// Returns `-N/2`
+    pub fn neg_half_n(&self) -> &Integer {
+        &self.neg_half_n
+    }
+}
+
+impl EncryptionKey {
     /// `l(x) = (x-1)/n`
     pub(crate) fn l(&self, x: &Integer) -> Option<Integer> {
         if (x % self.n()).complete() != *Integer::ONE {
