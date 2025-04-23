@@ -49,8 +49,8 @@ pub fn sample_in_mult_group(rng: &mut impl RngCore, n: &Integer) -> Integer {
     }
 }
 
-/// Samples an odd integer with size = bits
-pub fn sample_odd_with_size(rng: &mut impl RngCore, bits: u32) -> Integer {
+/// Samples with size = bits
+pub fn sample_with_size(rng: &mut impl RngCore, bits: u32) -> Integer {
     let mut rng = external_rand(rng);
     let mut x = Integer::new();
 
@@ -59,41 +59,46 @@ pub fn sample_odd_with_size(rng: &mut impl RngCore, bits: u32) -> Integer {
     // make sure the number size is `bits`
     x.set_bit(bits - 1, true);
 
+    x
+}
+
+/// Samples an odd integer with size = bits
+pub fn sample_odd_with_size(rng: &mut impl RngCore, bits: u32) -> Integer {
+    let mut x = sample_with_size(rng, bits);
+
     // make sure the number is odd
     x.set_bit(0, true);
 
     x
 }
 
-/// Check if `x` is a safe prime
-pub fn is_safe_prime(x: &Integer) -> bool {
+/// Check if `x` is a prime
+pub fn is_prime(x: &Integer) -> bool {
     use rug::integer::IsPrime;
 
-    let mut x = x.clone();
-
     // make sure the number is odd
-    if x.is_even() {
+    if !x.is_odd() {
         return false;
     }
 
     // make sure x does not divide any of the small primes
     for &small_prime in &small_primes::SMALL_PRIMES[0..small_primes::SMALL_PRIMES.len()] {
+        if Integer::from(small_prime) >= *x {
+            break;
+        }
+
         let mod_result = x.mod_u(small_prime);
-        if mod_result == (small_prime - 1) / 2 {
+        if mod_result == Integer::ZERO {
             return false;
         }
     }
 
     // 25 taken same as one used in mpz_nextprime
     if let IsPrime::Yes | IsPrime::Probably = x.is_probably_prime(25) {
-        x <<= 1;
-        x += 1;
-        if let IsPrime::Yes | IsPrime::Probably = x.is_probably_prime(25) {
-            return true;
-        }
+        return true;
     }
 
-    return false;
+    false
 }
 
 /// Validate aech pair of elements in vector is coprime
@@ -136,6 +141,9 @@ pub fn sieve_generate_safe_primes(rng: &mut impl RngCore, bits: u32, amount: usi
         x |= 1u32;
 
         for &small_prime in &small_primes::SMALL_PRIMES[0..amount] {
+            if small_prime >= x {
+                break;
+            }
             let mod_result = x.mod_u(small_prime);
             if mod_result == (small_prime - 1) / 2 {
                 continue 'trial;
@@ -289,11 +297,23 @@ mod test {
     #[test]
     fn safe_prime_size() {
         let mut rng = rand_dev::DevRng::new();
-        for size in [500, 512, 513, 514] {
+        for size in [10, 500, 512, 513, 514, 2048] {
             let mut prime = super::generate_safe_prime(&mut rng, size);
             // rug doesn't have bit length operations, so
             prime >>= size - 1;
             assert_eq!(&prime, rug::Integer::ONE);
+        }
+    }
+
+    #[test]
+    fn sample_with_size() {
+        let mut rng = rand_dev::DevRng::new();
+        for size in [799, 1279, 3455] {
+            let integer = super::sample_with_size(&mut rng, size);
+
+            // make sure the number size is `bits`
+            // rug doesn't have bit length operations, so
+            assert_eq!(integer.significant_bits(), size);
         }
     }
 
@@ -305,8 +325,7 @@ mod test {
 
             // make sure the number size is `bits`
             // rug doesn't have bit length operations, so
-            let most_bit = odd.clone() >> (size - 1);
-            assert_eq!(&most_bit, rug::Integer::ONE);
+            assert_eq!(odd.significant_bits(), size);
 
             // make sure the number is odd
             assert_eq!(odd.is_odd(), true);

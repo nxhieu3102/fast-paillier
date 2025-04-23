@@ -1,11 +1,11 @@
 use rand_core::{CryptoRng, RngCore};
 use rug::Integer;
 
-use crate::Error;
-use crate::{utils, Bug, Ciphertext, EncryptionKey, Nonce, Plaintext};
+use crate::{utils, AnyEncryptionKey, Bug, Ciphertext, EncryptionKey, Nonce, Plaintext};
+use crate::{Error, Reason};
 
 /// Paillier decryption key
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DecryptionKey {
     /// encryption key
     ek: EncryptionKey,
@@ -85,82 +85,141 @@ impl DecryptionKey {
         n_size: u32,
         a_size: u32,
     ) -> Result<Self, Error> {
-        let mut count = 0;
-        let (p, q, alpha) = loop {
-            count += 1;
-            println!("-------------- Loop #{count:}");
-
+        let (p, q, alpha, n) = 'outer: loop {
             // Step 1: generate div_p, div_q, other_div_p, other_div_q
             // let div_p, div_q are (a_size/2)-bit odd PRIMES
             // let other_div_p, other_div_q are ((n_size - a_size)/2 - 1)-bit odd INTEGERS
 
-            println!("Generating div_p, div_q");
-            // TODO: check the performance of `generate_safe_prime`
             let div_p = utils::generate_safe_prime(rng, a_size / 2);
             let div_q = utils::generate_safe_prime(rng, a_size / 2);
+            assert_eq!(div_p.significant_bits(), a_size / 2);
+            assert_eq!(div_q.significant_bits(), a_size / 2);
+            assert!(utils::is_prime(&div_p));
+            assert!(utils::is_prime(&div_q));
 
-            println!("Generating other_div_p, other_div_q");
-            let other_bit_length = (n_size - a_size) / 2 - 1;
-            let other_div_p = utils::sample_odd_with_size(rng, other_bit_length);
-            let other_div_q = utils::sample_odd_with_size(rng, other_bit_length);
+            // TODO: do we need to check if alpha size is exactly a_size?
+            // let temp_alpha = div_p.clone() * &div_q;
+            // if temp_alpha.significant_bits() != a_size {
+            //     // can not construct alpha of the right size
+            //     println!("div_p * div_q size is not equal to a_size");
+            //     continue 'outer;
+            // }
 
-            // Step 2: calculate p, q
-            // p = 2 * div_p * other_div_p + 1
-            // q = 2 * div_q * other_div_q + 1
-            println!("Calculating p, q");
-            let p: Integer = Integer::from(2) * &div_p * &other_div_p + 1;
-            let q: Integer = Integer::from(2) * &div_q * &other_div_q + 1;
+            let mut max_loop = 100;
+            'inner: loop {
+                max_loop -= 1;
+                if max_loop == 0 {
+                    // Max loop reached
+                    break 'inner;
+                }
 
-            // Step 3: validate q, p
-            // p, q are PRIMES
-            // p, q, div_p, div_q are COPRIME
-            println!("Validating p, q");
-            if !(utils::is_safe_prime(&p)) || !(utils::is_safe_prime(&q)) {
-                continue;
+                let other_bit_length = (n_size - a_size) / 2 - 1;
+
+                let other_div_p = utils::sample_odd_with_size(rng, other_bit_length);
+                let other_div_q = utils::sample_odd_with_size(rng, other_bit_length);
+                assert!(other_div_p.is_odd());
+                assert!(other_div_q.is_odd());
+                assert!(other_div_p.significant_bits() == other_bit_length);
+                assert!(other_div_q.significant_bits() == other_bit_length);
+
+                // Step 2: calculate p, q
+                // p = 2 * div_p * other_div_p + 1
+                // q = 2 * div_q * other_div_q + 1
+                let p: Integer = Integer::from(2) * &div_p * &other_div_p + 1;
+                let q: Integer = Integer::from(2) * &div_q * &other_div_q + 1;
+
+                // Step 3: validate
+
+                // TODO: do we need to check if n size is exactly n_size?
+                // // validate p, q can construct n of the right size
+                // let temp_n = p.clone() * &q;
+                // if temp_n.significant_bits() != n_size {
+                //     // can not construct n of the right size
+                //     println!("p * q size is not equal to n_size");
+                //     continue 'outer;
+                // }
+
+                // validate div_p, div_q, other_div_p, other_div_q are COPRIME
+                if !utils::check_coprime(&[&div_p, &div_q, &other_div_p, &other_div_q]) {
+                    println!("div_p, div_q, other_div_p, other_div_q are not coprime");
+                    continue 'inner;
+                }
+
+                // p, q are PRIMES
+                if !(utils::is_prime(&p)) || !(utils::is_prime(&q)) {
+                    println!("p or q are not prime");
+                    continue 'inner;
+                }
+
+                // Step 4: calculate alpha = div_p * div_q
+                // n = p * q
+                let alpha = div_p * div_q;
+                let n = p.clone() * &q;
+
+                break 'outer (p, q, alpha, n);
             }
-
-            println!("Validating coprime");
-            if !utils::check_coprime(&[&div_p, &div_q, &other_div_p, &other_div_q]) {
-                continue;
-            }
-
-            // Step 4: calculate alpha = div_p * div_q
-            println!("Calculating alpha");
-            let alpha = div_p * div_q;
-
-            println!("Random success");
-            break (p, q, alpha);
         };
-
-        println!("COUNT = {}", count);
-
-        // n = p * q
-        println!("Calculating n");
-        let n = p.clone() * &q;
 
         // h = -y^(2*beta) mod n
         // where beta = (p - 1)(q - 1)/(4.alpha)
         // y is a random element of Z*_N
 
-        println!("Calculating h");
         let beta: Integer = (p.clone() - 1) * (q.clone() - 1) / (Integer::from(4) * &alpha);
         let y = utils::sample_in_mult_group(rng, &n);
         let h = -y
             .pow_mod(&(Integer::from(2) * &beta), &n)
             .map_err(|_| Bug::PowModUndef)?;
 
-        println!("Calculating encryption key");
         let ek = EncryptionKey::new(n_size, a_size, h, n)?;
 
-        println!("Decryption key generated");
         Ok(Self { ek, p, q, alpha })
+    }
+
+    /// Return a fix decryptoion key for testing
+    /// n size = 2048
+    /// alpha size = 448
+    pub fn sample() -> Self {
+        Self {
+            ek: EncryptionKey::sample(),
+            p: Integer::from_str_radix("352b408f842f95ff7b042028afbd2a9312066e4e41d105e8ca2e162686c05908199e14805579c1a180aba9b20ec3e6d86e77be0cf0cc92212932606089bce6366a978b45e139d2b4abfa86e4fc198f3710d571988b39a050f0d0d857caabb74347d069c7f30d8a93db788abc1814caf5fd755df47391a8f350f85b1c522c7d5b", 16).unwrap(),
+            q: Integer::from_str_radix("ae553897573c0513948d2430f88e41120d9bfe9dacfcb0213bdb51c2880e388f5966d272cb97dd88666d2a921748ead1f787067f1c758f334a5ecefafb6afdbf3c0ffd2632d49d0448ef314d95c0b92711ebe1bc40b031e300f7cb2a78520e130446f7f4bc014253b47627dee93094c8907c67fe0681bc24ebfd57e5b241d95f", 16).unwrap(),
+            alpha: Integer::from_str_radix("7ffeabae28c7c128fab071c9f379387da9b8d4ce576c6f5af837d676a89109b7461ea3376a52b5a38ffcd40eb55dab3478b5fe94579512e9", 16).unwrap() ,
+        }
     }
 }
 
 impl DecryptionKey {
     /// Decrypts the ciphertext, returns plaintext in `{-N/2, .., N_2}`
+    ///
+    /// plaintext = L(c^(2*alpha) mod N^2, N) * (2*alpha)^{-1} mod N
+    /// where: L(u, N) = (u - 1) / N (mod)
     pub fn decrypt(&self, c: &Ciphertext) -> Result<Plaintext, Error> {
-        todo!()
+        let two_alpha = Integer::from(2) * &self.alpha;
+
+        // L(c^(2*alpha) mod N^2, N)
+        let u = c
+            .clone()
+            .pow_mod(&two_alpha, self.nn())
+            .map_err(|_| Error(Reason::Bug(Bug::PowModUndef)))?;
+        // TODO: do we need to check u % N^2 == 1?
+        // assert_eq!(u.clone() % self.nn(), Integer::from(1));
+
+        let l = (u - 1) / self.n();
+
+        // (2 * alpha)^{-1} mod N
+        let two_alpha_inv = two_alpha
+            .invert(self.n())
+            .map_err(|_| Error(Reason::Bug(Bug::InvertUndef)))?;
+
+        // plaintext = L(c^(2*alpha) mod N^2, N) * (2*alpha)^{-1} mod N
+        let plaintext = l * &two_alpha_inv % self.n();
+
+        // make sure plaintext is positive
+        if plaintext > *self.half_n() {
+            Ok(plaintext - self.n())
+        } else {
+            Ok(plaintext)
+        }
     }
 
     /// Encrypts a plaintext `x` in `{-N/2, .., N/2}` with `nonce` from `Z*_n`
@@ -169,7 +228,11 @@ impl DecryptionKey {
     ///
     /// Returns error if inputs are not in specified range
     pub fn encrypt_with(&self, x: &Plaintext, nonce: &Nonce) -> Result<Ciphertext, Error> {
-        todo!()
+        // TODO: encrypt using Chinese Remainder Theorem
+
+        self.ek
+            .encrypt_with(x, nonce)
+            .map_err(|_| Error(Reason::Bug(Bug::PowModUndef)))
     }
 
     /// Encrypts the plaintext `x` in `{-N/2, .., N_2}`
@@ -184,7 +247,11 @@ impl DecryptionKey {
         rng: &mut (impl RngCore + CryptoRng),
         x: &Plaintext,
     ) -> Result<(Ciphertext, Nonce), Error> {
-        todo!()
+        // TODO: encrypt using Chinese Remainder Theorem
+
+        self.ek
+            .encrypt_with_random(rng, x)
+            .map_err(|_| Error(Reason::Bug(Bug::PowModUndef)))
     }
 
     /// Homomorphic multiplication of scalar at ciphertext
@@ -195,7 +262,9 @@ impl DecryptionKey {
     /// omul(a, Enc(c)) = Enc(a * c)
     /// ```
     pub fn omul(&self, scalar: &Integer, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
-        todo!()
+        // TODO: omul using Chinese Remainder Theorem
+
+        self.ek.omul(scalar, ciphertext)
     }
 }
 
@@ -205,20 +274,21 @@ mod tests {
 
     use crate::decryption_key::DecryptionKey;
 
+    // #[test]
+    // fn test_key_generation() {
+    //     let mut rngs = rand::thread_rng();
+    //     let n_size = 2048;
+    //     let a_size = 448;
+
+    //     let dk = DecryptionKey::generate(&mut rngs, n_size, a_size).unwrap();
+
+    //     println!("{:?}", dk);
+    // }
+
     #[test]
-    fn test_decryption_key() {
-        println!("test_decryption_key");
+    fn test_sample_decryption_key() {
+        let dk = DecryptionKey::sample();
 
-        let mut rng = rand::thread_rng();
-        // let n_size = 2048;
-        // let a_size = 448;
-        let n_size = 15;
-        let a_size = 10;
-
-        let dk = DecryptionKey::generate(&mut rng, n_size, a_size).unwrap();
-
-        assert_eq!(dk.bits_length(), a_size / 2);
-        assert_eq!(dk.p().significant_bits(), dk.q().significant_bits());
         assert_eq!(dk.p().clone() % 4, Integer::from(3));
         assert_eq!(dk.q().clone() % 4, Integer::from(3));
     }

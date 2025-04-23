@@ -29,16 +29,10 @@ pub struct Error(#[from] Reason);
 
 #[derive(Debug, thiserror::Error)]
 enum Reason {
-    #[error("p,q are invalid")]
-    InvalidPQ,
     #[error("encryption error")]
     Encrypt,
-    #[error("decryption error")]
-    Decrypt,
     #[error("homomorphic operation failed: invalid inputs")]
     Ops,
-    #[error("could not precompute data for faster exponentiation")]
-    BuildFastExp,
     #[error("bug occurred")]
     Bug(#[source] Bug),
 }
@@ -47,6 +41,8 @@ enum Reason {
 enum Bug {
     #[error("pow mod undefined")]
     PowModUndef,
+    #[error("invert undefined")]
+    InvertUndef,
 }
 
 impl From<Bug> for Error {
@@ -227,10 +223,39 @@ impl AnyEncryptionKey for DecryptionKey {
     }
 }
 
-impl<'a> fmt::Debug for dyn AnyEncryptionKey + 'a {
+impl fmt::Debug for dyn AnyEncryptionKey + '_ {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PaillierEncKey")
             .field("N", self.n())
             .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{decryption_key::DecryptionKey, utils};
+    use rug::Integer;
+
+    #[test]
+    fn test_enc_dec() {
+        let mut rng = rand::thread_rng();
+
+        let dk = DecryptionKey::sample();
+        let ek = dk.encryption_key();
+
+        let plaintext = Integer::from(123);
+        let (ciphertext, nonce) = ek.encrypt_with_random(&mut rng, &plaintext).unwrap();
+
+        match dk.decrypt(&ciphertext) {
+            Ok(decrypted) => {
+                assert_eq!(decrypted, plaintext);
+                assert!(ek.in_signed_group(&decrypted));
+                assert!(utils::in_mult_group(&decrypted, ek.nn()));
+                assert_eq!(ek.nounce_size(), nonce.significant_bits());
+            }
+            Err(_) => {
+                panic!("Decryption failed");
+            }
+        }
     }
 }

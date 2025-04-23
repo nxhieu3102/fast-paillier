@@ -13,7 +13,7 @@ pub struct EncryptionKey {
     /// alpha size in decryption key
     a_size: u32,
 
-    /// nounce (random) in encryption have size 2*a_size
+    /// nounce (random) in encryption have size a_size (follow the paper)
     nounce_size: u32,
 
     /// generator of nounce space (G)
@@ -43,7 +43,7 @@ pub struct EncryptionKey {
 impl EncryptionKey {
     /// Constructs an encryption key
     pub fn new(n_size: u32, a_size: u32, h: Integer, n: Integer) -> Result<Self, Error> {
-        let nounce_size = a_size * 2;
+        let nounce_size = a_size;
         let nn = n.clone() * &n;
         let half_n = n.clone() >> 1u32;
         let neg_half_n = -half_n.clone();
@@ -60,6 +60,16 @@ impl EncryptionKey {
             half_n,
             neg_half_n,
         })
+    }
+
+    /// Sample a default encryption key for testing
+    pub fn sample() -> Self {
+        let n_size = 2048;
+        let a_size = 448;
+        let h = Integer::from_str_radix("1c5e08d902e681c9bc7e915aa58ba4e5b67d7cd4a20d07253bb486d3cf0c9c4eb05f28fac0b30bce24b2502592ec06f206f07d298676e655b2a47575750f177ba05ca985900c053716cb41595ae7b6b90e2473d04f8ee0300e9441dba1e53fc26795e4e099a983fbfcc118390112c2fe2cb1e9a4ea3b32a6a458ae6a2a22d89d7f6a8ace29cc1c8bdb0babb7d8d85de58e3c0c5eae53fe638bf34b7b2aef251fd12e42d8c8498e29907205ec0e8520a508ab7f76ddb8b971d7ba7f92f4ecf074f5eced4a0fb0ee842707b0ba8fb8615dd5a67d7543b5c7c82a3df778c4a14082153e64842e97c3956d66af26dedf499343e992efae9283ae5a1aa9f939edfffe", 16).unwrap();
+        let n = Integer::from_str_radix("243518fee03fdf73a53413db4bd932ec13f07bd48bd815274f3571caa06c9b691dcb95779cbcd2fa844d04b6104c79d510782e9da665e9dd6b544169ed5ea23dba3a07c404a3469d1e4a7759987d75d03023ec87ee1c245402c1a9cae0c64dbc5d2cd8faec558aa981c09a29df4cd9725eb523181dc854ada7f9d137c7452f0115fee48c03308d58c6e87dd93cf1fde5850f6317a0eea6c822fa9485a3f610aae8353c237fd0fcb21e7e2b3de72bab897e37c4fd3b53a89960b546a31beff7466b2abe7a3a32795fe52f8146a28c1bdc659a44c6e2b73061a077945c6b26eb6d43a3a48c291cd39903e6ba29a169128743d0935cd60fd26f710dad064edfa7c5", 16).unwrap();
+
+        Self::new(n_size, a_size, h, n).unwrap()
     }
 
     /// Returns `n_size`
@@ -109,27 +119,28 @@ impl EncryptionKey {
 }
 
 impl EncryptionKey {
-    /// `l(x) = (x-1)/n`
-    pub(crate) fn l(&self, x: &Integer) -> Option<Integer> {
-        if (x % self.n()).complete() != *Integer::ONE {
-            return None;
-        }
-        if !utils::in_mult_group(x, self.nn()) {
-            return None;
-        }
-
-        // (x - 1) / N
-        Some((x - Integer::ONE).complete() / self.n())
+    /// Checks whether `x` is `{-N/2, .., N/2}`
+    pub fn in_signed_group(&self, x: &Integer) -> bool {
+        self.neg_half_n <= *x && *x <= self.half_n
     }
+}
 
-    /// Encrypts the plaintext `x` in `{-N/2, .., N_2}` with `nonce` in `Z*_n`
+impl EncryptionKey {
+    /// Encrypts the plaintext `x` in `{-N/2, .., N_2}` with `nonce` in `{0,1}^nounce_size`
+    /// regard nounce as an integer in Z naturally
+    ///
+    /// Encrypt: Enc(x) = (1 + N)^x.(h^r mod N)^N mod N^2
+    ///                 = (1 + x.N).(h^N mod N^2)^r mod N^2
+    ///                 = (1 + x.N).h_pow_n^r mod N^2 (h_pow_n = h^N mod N^2)
     ///
     /// Returns error if inputs are not in specified range
     pub fn encrypt_with(&self, x: &Plaintext, nonce: &Nonce) -> Result<Ciphertext, Error> {
-        if !self.in_signed_group(x) || !utils::in_mult_group(nonce, self.n()) {
+        // Check plaintext is in signed group
+        if !self.in_signed_group(x) {
             return Err(Reason::Encrypt.into());
         }
 
+        // Make x positive
         let x = if x.cmp0().is_ge() {
             x.clone()
         } else {
@@ -138,10 +149,11 @@ impl EncryptionKey {
 
         // a = (1 + N)^x mod N^2 = (1 + xN) mod N^2
         let a = (Integer::ONE + (&x * self.n()).complete()) % self.nn();
-        // b = nonce^N mod N^2
-        let b = nonce
+        // b = (h^nonce mod N)^N mod N^2 = (h^n mod N^2)^nonce mod N^2 = h_pow_n^nonce mod N^2
+        let b = self
+            .h_pow_n()
             .clone()
-            .pow_mod(self.n(), self.nn())
+            .pow_mod(nonce, self.nn())
             .map_err(|_| Bug::PowModUndef)?;
 
         let c = (a * b).modulo(self.nn());
@@ -158,11 +170,13 @@ impl EncryptionKey {
         rng: &mut (impl RngCore + CryptoRng),
         x: &Plaintext,
     ) -> Result<(Ciphertext, Nonce), Error> {
-        let nonce = utils::sample_in_mult_group(rng, self.n());
+        let nonce = utils::sample_with_size(rng, self.nounce_size());
         let ciphertext = self.encrypt_with(x, &nonce)?;
         Ok((ciphertext, nonce))
     }
+}
 
+impl EncryptionKey {
     /// Homomorphic addition of two ciphertexts
     ///
     /// ```text
@@ -213,10 +227,5 @@ impl EncryptionKey {
     /// ```
     pub fn oneg(&self, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
         Ok(ciphertext.invert_ref(self.nn()).ok_or(Reason::Ops)?.into())
-    }
-
-    /// Checks whether `x` is `{-N/2, .., N/2}`
-    pub fn in_signed_group(&self, x: &Integer) -> bool {
-        self.neg_half_n <= *x && *x <= self.half_n
     }
 }
