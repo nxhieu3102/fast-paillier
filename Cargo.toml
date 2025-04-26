@@ -32,3 +32,4 @@ serde = ["dep:serde", "rug/serde"]
 [[bench]]
 name = "comparison"
 harness = false
+

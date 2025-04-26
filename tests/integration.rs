@@ -1,5 +1,6 @@
 // TODO: update integration test
 
+use fast_paillier::AnyEncryptionKey;
 use fast_paillier::{utils, DecryptionKey};
 use rand::{CryptoRng, Rng, RngCore};
 use rug::{Complete, Integer};

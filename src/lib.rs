@@ -43,6 +43,10 @@ enum Bug {
     PowModUndef,
     #[error("invert undefined")]
     InvertUndef,
+    #[error("invalid encryption key")]
+    InvalidEncryptionKey,
+    #[error("invalid decryption key")]
+    InvalidDecryptionKey,
 }
 
 impl From<Bug> for Error {
@@ -80,12 +84,24 @@ mod sealed {
 /// }
 /// ```
 pub trait AnyEncryptionKey: sealed::Sealed {
+    /// Returns the size of `N` in bits
+    fn n_size(&self) -> u32;
+    /// Returns the size of `a` in bits
+    fn a_size(&self) -> u32;
+    /// Returns the size of nonce in bits
+    fn nounce_size(&self) -> u32;
     /// Returns `N`
     fn n(&self) -> &Integer;
     /// Returns `N^2`
     fn nn(&self) -> &Integer;
     /// Returns `N/2`
     fn half_n(&self) -> &Integer;
+    /// Return -`N/2`
+    fn neg_half_n(&self) -> &Integer;
+    /// Returns h
+    fn h(&self) -> &Integer;
+    /// Return h^n
+    fn h_pow_n(&self) -> &Integer;
 
     /// Encrypts the plaintext `x` in `{-N/2, .., N_2}` with `nonce` in `Z*_n`
     ///
@@ -148,6 +164,18 @@ impl<E: AnyEncryptionKey> AnyEncryptionKeyExt for E {
 }
 
 impl AnyEncryptionKey for EncryptionKey {
+    fn n_size(&self) -> u32 {
+        self.n_size()
+    }
+
+    fn a_size(&self) -> u32 {
+        self.a_size()
+    }
+
+    fn nounce_size(&self) -> u32 {
+        self.nounce_size()
+    }
+
     fn n(&self) -> &Integer {
         self.n()
     }
@@ -158,6 +186,18 @@ impl AnyEncryptionKey for EncryptionKey {
 
     fn half_n(&self) -> &Integer {
         self.half_n()
+    }
+
+    fn neg_half_n(&self) -> &Integer {
+        self.neg_half_n()
+    }
+
+    fn h(&self) -> &Integer {
+        self.h()
+    }
+
+    fn h_pow_n(&self) -> &Integer {
+        self.h_pow_n()
     }
 
     fn encrypt_with(&self, x: &Plaintext, nonce: &Nonce) -> Result<Ciphertext, Error> {
@@ -186,6 +226,18 @@ impl AnyEncryptionKey for EncryptionKey {
 }
 
 impl AnyEncryptionKey for DecryptionKey {
+    fn n_size(&self) -> u32 {
+        self.encryption_key().n_size()
+    }
+
+    fn a_size(&self) -> u32 {
+        self.encryption_key().a_size()
+    }
+
+    fn nounce_size(&self) -> u32 {
+        self.encryption_key().nounce_size()
+    }
+
     fn n(&self) -> &Integer {
         self.encryption_key().n()
     }
@@ -196,6 +248,18 @@ impl AnyEncryptionKey for DecryptionKey {
 
     fn half_n(&self) -> &Integer {
         self.encryption_key().half_n()
+    }
+
+    fn neg_half_n(&self) -> &Integer {
+        self.encryption_key().neg_half_n()
+    }
+
+    fn h(&self) -> &Integer {
+        self.encryption_key().h()
+    }
+
+    fn h_pow_n(&self) -> &Integer {
+        self.encryption_key().h_pow_n()
     }
 
     fn encrypt_with(&self, x: &Plaintext, nonce: &Nonce) -> Result<Ciphertext, Error> {

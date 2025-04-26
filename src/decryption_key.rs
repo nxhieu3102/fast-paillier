@@ -1,5 +1,5 @@
 use rand_core::{CryptoRng, RngCore};
-use rug::Integer;
+use rug::{Complete, Integer};
 
 use crate::{utils, AnyEncryptionKey, Bug, Ciphertext, EncryptionKey, Nonce, Plaintext};
 use crate::{Error, Reason};
@@ -141,13 +141,13 @@ impl DecryptionKey {
 
                 // validate div_p, div_q, other_div_p, other_div_q are COPRIME
                 if !utils::check_coprime(&[&div_p, &div_q, &other_div_p, &other_div_q]) {
-                    println!("div_p, div_q, other_div_p, other_div_q are not coprime");
+                    // println!("div_p, div_q, other_div_p, other_div_q are not coprime");
                     continue 'inner;
                 }
 
                 // p, q are PRIMES
                 if !(utils::is_prime(&p)) || !(utils::is_prime(&q)) {
-                    println!("p or q are not prime");
+                    // println!("p or q are not prime");
                     continue 'inner;
                 }
 
@@ -171,6 +171,13 @@ impl DecryptionKey {
             .map_err(|_| Bug::PowModUndef)?;
 
         let ek = EncryptionKey::new(n_size, a_size, h, n)?;
+
+        Ok(Self { ek, p, q, alpha })
+    }
+
+    /// Return a decryption key from the encryption key, p, q, alpha
+    pub fn new(ek: EncryptionKey, p: Integer, q: Integer, alpha: Integer) -> Result<Self, Error> {
+        // TODO: validate ek, p, q, alpha are valid
 
         Ok(Self { ek, p, q, alpha })
     }

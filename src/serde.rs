@@ -1,15 +1,19 @@
-// TODO: update this to use the new API
-
-use rug::Integer;
-
+use crate::AnyEncryptionKey;
 use crate::{DecryptionKey, EncryptionKey};
+use rug::{rand, Integer};
 
 impl serde::Serialize for EncryptionKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        (self.n_size, self.a_size, self.h.clone(), self.n.clone()).serialize(serializer)
+        (
+            self.n_size(),
+            self.a_size(),
+            self.h().clone(),
+            self.n().clone(),
+        )
+            .serialize(serializer)
     }
 }
 
@@ -39,8 +43,10 @@ impl<'de> serde::Deserialize<'de> for DecryptionKey {
     where
         D: serde::Deserializer<'de>,
     {
-        let [n_size, a_size] = <[u32; 2]>::deserialize(deserializer)?;
-        DecryptionKey::generate(n_size, a_size)
+        let (ek, p, q, alpha) =
+            <(EncryptionKey, Integer, Integer, Integer)>::deserialize(deserializer)?;
+
+        DecryptionKey::new(ek, p, q, alpha)
             .map_err(|_| <D::Error as serde::de::Error>::custom("invalid paillier decryption key"))
     }
 }

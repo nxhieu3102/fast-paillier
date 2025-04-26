@@ -73,47 +73,47 @@ impl EncryptionKey {
     }
 
     /// Returns `n_size`
-    pub fn n_size(&self) -> u32 {
+    pub(crate) fn n_size(&self) -> u32 {
         self.n_size
     }
 
     /// Returns `a_size`
-    pub fn a_size(&self) -> u32 {
+    pub(crate) fn a_size(&self) -> u32 {
         self.a_size
     }
 
     /// Returns `nounce_size`
-    pub fn nounce_size(&self) -> u32 {
+    pub(crate) fn nounce_size(&self) -> u32 {
         self.nounce_size
     }
 
     /// Returns `h`
-    pub fn h(&self) -> &Integer {
+    pub(crate) fn h(&self) -> &Integer {
         &self.h
     }
 
     /// Returns `N`
-    pub fn n(&self) -> &Integer {
+    pub(crate) fn n(&self) -> &Integer {
         &self.n
     }
 
     /// Returns `N^2`
-    pub fn nn(&self) -> &Integer {
+    pub(crate) fn nn(&self) -> &Integer {
         &self.nn
     }
 
     /// Returns `h^N mod N^2`
-    pub fn h_pow_n(&self) -> &Integer {
+    pub(crate) fn h_pow_n(&self) -> &Integer {
         &self.h_pow_n
     }
 
     /// Returns `N/2`
-    pub fn half_n(&self) -> &Integer {
+    pub(crate) fn half_n(&self) -> &Integer {
         &self.half_n
     }
 
     /// Returns `-N/2`
-    pub fn neg_half_n(&self) -> &Integer {
+    pub(crate) fn neg_half_n(&self) -> &Integer {
         &self.neg_half_n
     }
 }
