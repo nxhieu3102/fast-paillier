@@ -1,5 +1,8 @@
+// TODO: update integration test
+
+use fast_paillier::AnyEncryptionKey;
 use fast_paillier::{utils, DecryptionKey};
-use rand::Rng;
+use rand::{CryptoRng, Rng, RngCore};
 use rug::{Complete, Integer};
 
 #[test]
@@ -222,8 +225,9 @@ fn unsigned_mod_to_signed(x: Integer, n: &Integer) -> Integer {
     }
 }
 
-fn random_key_for_tests(rng: &mut impl rand_core::RngCore) -> DecryptionKey {
-    let p = utils::generate_safe_prime(rng, 512);
-    let q = utils::generate_safe_prime(rng, 512);
-    DecryptionKey::from_primes(p, q).unwrap()
+fn random_key_for_tests(rng: &mut (impl RngCore + CryptoRng)) -> DecryptionKey {
+    let n_size = 2048;
+    let a_size = 448;
+
+    DecryptionKey::generate(rng, n_size, a_size).unwrap()
 }

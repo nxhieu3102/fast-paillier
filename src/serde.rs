@@ -1,13 +1,19 @@
-use rug::Integer;
-
+use crate::AnyEncryptionKey;
 use crate::{DecryptionKey, EncryptionKey};
+use rug::Integer;
 
 impl serde::Serialize for EncryptionKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        self.n().serialize(serializer)
+        (
+            self.n_size(),
+            self.a_size(),
+            self.h().clone(),
+            self.n().clone(),
+        )
+            .serialize(serializer)
     }
 }
 
@@ -16,8 +22,10 @@ impl<'de> serde::Deserialize<'de> for EncryptionKey {
     where
         D: serde::Deserializer<'de>,
     {
-        let n = Integer::deserialize(deserializer)?;
-        Ok(EncryptionKey::from_n(n))
+        let (n_size, a_size, h, n) = <(u32, u32, Integer, Integer)>::deserialize(deserializer)?;
+        Ok(EncryptionKey::new(n_size, a_size, h, n).map_err(|_| {
+            <D::Error as serde::de::Error>::custom("invalid paillier encryption key")
+        })?)
     }
 }
 
@@ -26,8 +34,7 @@ impl serde::Serialize for DecryptionKey {
     where
         S: serde::Serializer,
     {
-        let pq = [self.p(), self.q()];
-        pq.serialize(serializer)
+        [self.n_size(), self.a_size()].serialize(serializer)
     }
 }
 
@@ -36,8 +43,10 @@ impl<'de> serde::Deserialize<'de> for DecryptionKey {
     where
         D: serde::Deserializer<'de>,
     {
-        let [p, q] = <[Integer; 2]>::deserialize(deserializer)?;
-        DecryptionKey::from_primes(p, q)
-            .map_err(|_| <D::Error as serde::de::Error>::custom("invalid paillier key"))
+        let (ek, p, q, alpha) =
+            <(EncryptionKey, Integer, Integer, Integer)>::deserialize(deserializer)?;
+
+        DecryptionKey::new(ek, p, q, alpha)
+            .map_err(|_| <D::Error as serde::de::Error>::custom("invalid paillier decryption key"))
     }
 }

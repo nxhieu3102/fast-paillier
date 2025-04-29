@@ -1,7 +1,7 @@
 //! Various utilities
 
 use std::fmt;
-use curv::{arithmetic::Converter, BigInt};
+
 use rand_core::RngCore;
 use rug::{Assign, Complete, Integer};
 
@@ -49,6 +49,70 @@ pub fn sample_in_mult_group(rng: &mut impl RngCore, n: &Integer) -> Integer {
     }
 }
 
+/// Samples with size = bits
+pub fn sample_with_size(rng: &mut impl RngCore, bits: u32) -> Integer {
+    let mut rng = external_rand(rng);
+    let mut x = Integer::new();
+
+    x.assign(Integer::random_bits(bits, &mut rng));
+
+    // make sure the number size is `bits`
+    x.set_bit(bits - 1, true);
+
+    x
+}
+
+/// Samples an odd integer with size = bits
+pub fn sample_odd_with_size(rng: &mut impl RngCore, bits: u32) -> Integer {
+    let mut x = sample_with_size(rng, bits);
+
+    // make sure the number is odd
+    x.set_bit(0, true);
+
+    x
+}
+
+/// Check if `x` is a prime
+pub fn is_prime(x: &Integer) -> bool {
+    use rug::integer::IsPrime;
+
+    // make sure the number is odd
+    if !x.is_odd() {
+        return false;
+    }
+
+    // make sure x does not divide any of the small primes
+    for &small_prime in &small_primes::SMALL_PRIMES[0..small_primes::SMALL_PRIMES.len()] {
+        if Integer::from(small_prime) >= *x {
+            break;
+        }
+
+        let mod_result = x.mod_u(small_prime);
+        if mod_result == Integer::ZERO {
+            return false;
+        }
+    }
+
+    // 25 taken same as one used in mpz_nextprime
+    if let IsPrime::Yes | IsPrime::Probably = x.is_probably_prime(25) {
+        return true;
+    }
+
+    false
+}
+
+/// Validate aech pair of elements in vector is coprime
+pub fn check_coprime(v: &[&Integer]) -> bool {
+    for i in 0..v.len() {
+        for j in (i + 1)..v.len() {
+            if v[i].gcd_ref(v[j]).complete() != *Integer::ONE {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 /// Generates a random safe prime
 pub fn generate_safe_prime(rng: &mut impl RngCore, bits: u32) -> Integer {
     sieve_generate_safe_primes(rng, bits, 135)
@@ -77,6 +141,9 @@ pub fn sieve_generate_safe_primes(rng: &mut impl RngCore, bits: u32, amount: usi
         x |= 1u32;
 
         for &small_prime in &small_primes::SMALL_PRIMES[0..amount] {
+            if small_prime >= x {
+                break;
+            }
             let mod_result = x.mod_u(small_prime);
             if mod_result == (small_prime - 1) / 2 {
                 continue 'trial;
@@ -224,26 +291,58 @@ impl fmt::Debug for Exponent {
 
 #[cfg(test)]
 mod test {
+    use rug::Integer;
+    use std::vec;
+
     #[test]
     fn safe_prime_size() {
         let mut rng = rand_dev::DevRng::new();
-        for size in [500, 512, 513, 514] {
+        for size in [10, 500, 512, 513, 514, 2048] {
             let mut prime = super::generate_safe_prime(&mut rng, size);
             // rug doesn't have bit length operations, so
             prime >>= size - 1;
             assert_eq!(&prime, rug::Integer::ONE);
         }
     }
-}
 
-/// Converts a BigInt from curv to a rug Integer
-pub fn bigint_to_integer(bigint: BigInt) -> Integer {
-    let bytes = bigint.to_bytes();
-    Integer::from_digits(bytes.as_slice(), rug::integer::Order::MsfBe)
-}
+    #[test]
+    fn sample_with_size() {
+        let mut rng = rand_dev::DevRng::new();
+        for size in [799, 1279, 3455] {
+            let integer = super::sample_with_size(&mut rng, size);
 
-/// Converts a rug Integer to a curv BigInt
-pub fn integer_to_bigint(integer: Integer) -> BigInt {
-    let bytes = integer.to_digits(rug::integer::Order::MsfBe);
-    BigInt::from_bytes(&bytes)
+            // make sure the number size is `bits`
+            // rug doesn't have bit length operations, so
+            assert_eq!(integer.significant_bits(), size);
+        }
+    }
+
+    #[test]
+    fn sample_odd_with_size() {
+        let mut rng = rand_dev::DevRng::new();
+        for size in [799, 1279, 3455] {
+            let odd = super::sample_odd_with_size(&mut rng, size);
+
+            // make sure the number size is `bits`
+            // rug doesn't have bit length operations, so
+            assert_eq!(odd.significant_bits(), size);
+
+            // make sure the number is odd
+            assert_eq!(odd.is_odd(), true);
+        }
+    }
+
+    #[test]
+    fn test_coprime() {
+        let a = Integer::from(3);
+        let b = Integer::from(4);
+        let c = Integer::from(5);
+        let vec = vec![&a, &b, &c];
+
+        assert_eq!(super::check_coprime(&vec), true);
+
+        let d = Integer::from(6);
+        let vec = vec![&a, &b, &c, &d];
+        assert_eq!(super::check_coprime(&vec), false);
+    }
 }

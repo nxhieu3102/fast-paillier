@@ -12,8 +12,6 @@ keywords = ["paillier", "public-key", "encryption"]
 
 [dependencies]
 rug = { version = "1.27", default-features = false, features = ["std", "integer", "rand"] }
-kzen-paillier = { git = "https://github.com/nxhieu3102/rust-paillier" }
-curv-kzen = { git = "https://github.com/nxhieu3102/curv-kzen"}
 
 rand_core = "0.6"
 
@@ -21,7 +19,6 @@ bytemuck = { version = "1.5", features = ["derive"] }
 thiserror = "1"
 
 serde = { version = "1", optional = true }
-once_cell = "1.14"
 
 [dev-dependencies]
 rand = "0.8"
@@ -35,3 +32,4 @@ serde = ["dep:serde", "rug/serde"]
 [[bench]]
 name = "comparison"
 harness = false
+

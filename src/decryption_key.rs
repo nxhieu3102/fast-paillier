@@ -1,143 +1,232 @@
 use rand_core::{CryptoRng, RngCore};
-use rug::{Complete, Integer};
+use rug::Integer;
 
-use crate::{utils, Ciphertext, EncryptionKey, Nonce, Plaintext};
+use crate::{utils, AnyEncryptionKey, Bug, Ciphertext, EncryptionKey, Nonce, Plaintext};
 use crate::{Error, Reason};
-use kzen_paillier::optimized_paillier::{
-    Decrypt, DecryptionKey as OptimizedDecryptionKey, Encrypt,
-    EncryptionKey as OptimizedEncryptionKey, KeyGeneration, NGen, OptimizedPaillier, RawCiphertext,
-    RawPlaintext,
-};
+
 /// Paillier decryption key
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DecryptionKey {
-    /// paillier encryption key (scheme 1)
-    pub ek: EncryptionKey,
-    /// `lcm(p-1, q-1)`
-    pub lambda: Integer,
-    /// `lambda^-1 mod N`
-    pub mu: Integer,
+    /// encryption key
+    ek: EncryptionKey,
 
-    /// private prime
-    pub p: Integer,
-    /// private prime
-    pub q: Integer,
+    /// prime (n = p * q)
+    p: Integer,
+    /// prime (n = p * q)
+    q: Integer,
 
-    /// Chinese remainder for fast decryption
-    pub crt_mod_nn: utils::CrtExp,
-    /// Calculates `x ^ N mod N^2`. It's used for faster encryption
-    pub exp_n: utils::Exponent,
-    /// Calculates `x ^ lambda mod N^2`. It's used for faster decryption
-    pub exp_lambda: utils::Exponent,
+    /// (p-1)(q-1)/4 mod alpha = 0
+    alpha: Integer,
+}
 
-    /// additional info for optimized paillier dk
-    pub optimized_dk: OptimizedDecryptionKey,
-    /// additional info for optimized paillier ek
-    pub optimized_ek: OptimizedEncryptionKey,
+impl DecryptionKey {
+    /// Returns a (public) encryption key corresponding to the (secret) decryption key
+    pub fn encryption_key(&self) -> &EncryptionKey {
+        &self.ek
+    }
+
+    /// The Paillier modulus
+    pub fn n(&self) -> &Integer {
+        self.ek.n()
+    }
+
+    /// Prime `p`
+    pub fn p(&self) -> &Integer {
+        &self.p
+    }
+    /// Prime `q`
+    pub fn q(&self) -> &Integer {
+        &self.q
+    }
+
+    /// alpha | (p - 1)(q - 1)/4
+    pub fn alpha(&self) -> &Integer {
+        &self.alpha
+    }
+
+    /// Bits length of smaller prime (`p` or `q`)
+    pub fn bits_length(&self) -> u32 {
+        self.p.significant_bits().min(self.q.significant_bits())
+    }
 }
 
 impl DecryptionKey {
     /// Generates a paillier key
     ///
-    /// Samples two safe 1536-bits primes that meets 128 bits security level
-    pub fn generate(rng: &mut (impl RngCore + CryptoRng)) -> Result<Self, Error> {
-        let ngen = OptimizedPaillier::ngen(2048, 448);
-        let (_ek, dk) = ngen.keys();
-        let p = utils::bigint_to_integer(ngen.p);
-        let q = utils::bigint_to_integer(ngen.q);
+    /// QR_N: set of all quadratic residues in Z*_N
+    /// QR_N = {x^2 mod N | x in Z*_N}
+    ///
+    /// N = Q * P
+    /// Then, QR_N is a cyclic group of order phi(N)/4 = (P -1)(Q - 1)/4
+    ///
+    /// If: alpha * beta = (P - 1)(Q - 1)/4
+    /// QR_N = QR^alpha_N * QR^beta_N
+    /// QR^alpha_N = {x^(2.alpha) mod N | x in Z*_N} of size beta
+    /// QR^beta_N  = {x^(2.beta)  mod N | x in Z*_N} of size alpha
+    ///
+    /// Random space: G = QR^beta_N * <-1> of Z*_N, cyclic group of order 2.alpha
+    /// h is a generator of G -> h^(2.alpha) = 1 mod N
+    /// We can chose: h = -y^(2*beta) mod N, where y is a random element of Z*_N
+    ///
+    /// Requirements:
+    /// div_p | (p -1)
+    /// div_q | (q -1)
+    /// p = q = 3 (mod 4)
+    /// gcd(p - 1, q - 1) = 2
+    /// gcd(div_p.div_q, (p - 1)(q - 1)/4) = 1
+    ///
+    /// Then:
+    /// alpha = div_p * div_q
+    /// beta = (p - 1)(q - 1)/(4.alpha)
+    /// n = p * q
+    /// h = - y^(2*beta) mod n
+    pub fn generate(
+        rng: &mut (impl RngCore + CryptoRng),
+        n_size: u32,
+        a_size: u32,
+    ) -> Result<Self, Error> {
+        let (p, q, alpha, n) = 'outer: loop {
+            // Step 1: generate div_p, div_q, other_div_p, other_div_q
+            // let div_p, div_q are (a_size/2)-bit odd PRIMES
+            // let other_div_p, other_div_q are ((n_size - a_size)/2 - 1)-bit odd INTEGERS
 
-        let pm1 = Integer::from(&p - 1);
-        let qm1 = Integer::from(&q - 1);
-        let ek = EncryptionKey::from_n((&p * &q).complete());
-        let lambda = pm1.clone().lcm(&qm1);
-        if lambda.cmp0().is_eq() {
-            return Err(Reason::InvalidPQ.into());
-        }
+            let div_p = utils::generate_safe_prime(rng, a_size / 2);
+            let div_q = utils::generate_safe_prime(rng, a_size / 2);
+            assert_eq!(div_p.significant_bits(), a_size / 2);
+            assert_eq!(div_q.significant_bits(), a_size / 2);
+            assert!(utils::is_prime(&div_p));
+            assert!(utils::is_prime(&div_q));
 
-        // u = lambda^-1 mod N
-        let u = lambda.invert_ref(ek.n()).ok_or(Reason::InvalidPQ)?.into();
+            // TODO: do we need to check if alpha size is exactly a_size?
+            // let temp_alpha = div_p.clone() * &div_q;
+            // if temp_alpha.significant_bits() != a_size {
+            //     // can not construct alpha of the right size
+            //     println!("div_p * div_q size is not equal to a_size");
+            //     continue 'outer;
+            // }
 
-        let crt_mod_nn = utils::CrtExp::build_nn(&p, &q).ok_or(Reason::BuildFastExp)?;
-        let exp_n = crt_mod_nn.prepare_exponent(ek.n());
-        let exp_lambda = crt_mod_nn.prepare_exponent(&lambda);
+            let mut max_loop = 100;
+            'inner: loop {
+                max_loop -= 1;
+                if max_loop == 0 {
+                    // Max loop reached
+                    break 'inner;
+                }
 
-        let optimized_dk =
-            OptimizedDecryptionKey::new(dk.p.clone(), dk.q.clone(), dk.alpha.clone(), dk.n.clone());
+                let other_bit_length = (n_size - a_size) / 2 - 1;
 
-        let optimized_ek =
-            OptimizedEncryptionKey::new(2048, _ek.n.clone(), _ek.h.clone(), _ek.hn.clone());
+                let other_div_p = utils::sample_odd_with_size(rng, other_bit_length);
+                let other_div_q = utils::sample_odd_with_size(rng, other_bit_length);
+                assert!(other_div_p.is_odd());
+                assert!(other_div_q.is_odd());
+                assert!(other_div_p.significant_bits() == other_bit_length);
+                assert!(other_div_q.significant_bits() == other_bit_length);
 
-        Ok(Self {
-            ek,
-            lambda,
-            mu: u,
-            p,
-            q,
-            crt_mod_nn,
-            exp_n,
-            exp_lambda,
-            optimized_dk,
-            optimized_ek,
-        })
+                // Step 2: calculate p, q
+                // p = 2 * div_p * other_div_p + 1
+                // q = 2 * div_q * other_div_q + 1
+                let p: Integer = Integer::from(2) * &div_p * &other_div_p + 1;
+                let q: Integer = Integer::from(2) * &div_q * &other_div_q + 1;
+
+                // Step 3: validate
+
+                // TODO: do we need to check if n size is exactly n_size?
+                // // validate p, q can construct n of the right size
+                // let temp_n = p.clone() * &q;
+                // if temp_n.significant_bits() != n_size {
+                //     // can not construct n of the right size
+                //     println!("p * q size is not equal to n_size");
+                //     continue 'outer;
+                // }
+
+                // validate div_p, div_q, other_div_p, other_div_q are COPRIME
+                if !utils::check_coprime(&[&div_p, &div_q, &other_div_p, &other_div_q]) {
+                    // println!("div_p, div_q, other_div_p, other_div_q are not coprime");
+                    continue 'inner;
+                }
+
+                // p, q are PRIMES
+                if !(utils::is_prime(&p)) || !(utils::is_prime(&q)) {
+                    // println!("p or q are not prime");
+                    continue 'inner;
+                }
+
+                // Step 4: calculate alpha = div_p * div_q
+                // n = p * q
+                let alpha = div_p * div_q;
+                let n = p.clone() * &q;
+
+                break 'outer (p, q, alpha, n);
+            }
+        };
+
+        // h = -y^(2*beta) mod n
+        // where beta = (p - 1)(q - 1)/(4.alpha)
+        // y is a random element of Z*_N
+
+        let beta: Integer = (p.clone() - 1) * (q.clone() - 1) / (Integer::from(4) * &alpha);
+        let y = utils::sample_in_mult_group(rng, &n);
+        let h = -y
+            .pow_mod(&(Integer::from(2) * &beta), &n)
+            .map_err(|_| Bug::PowModUndef)?;
+
+        let ek = EncryptionKey::new(n_size, a_size, h, n)?;
+
+        Ok(Self { ek, p, q, alpha })
     }
 
-    /// Constructs a paillier key from primes `p`, `q`
-    ///
-    /// `p` and `q` need to be safe primes sufficiently large to meet security level requirements.
-    ///
-    /// Returns error if `p` and `q` do not correspond to a valid paillier key.
-    #[allow(clippy::many_single_char_names)]
-    pub fn from_primes(p: Integer, q: Integer) -> Result<Self, Error> {
-        // Paillier doesn't work if p == q
-        if p == q {
-            return Err(Reason::InvalidPQ.into());
-        }
-        let pm1 = Integer::from(&p - 1);
-        let qm1: Integer = Integer::from(&q - 1);
-        let ek: EncryptionKey = EncryptionKey::from_n((&p * &q).complete());
-        let lambda: Integer = pm1.clone().lcm(&qm1);
-        if lambda.cmp0().is_eq() {
-            return Err(Reason::InvalidPQ.into());
-        }
+    /// Return a decryption key from the encryption key, p, q, alpha
+    pub fn new(ek: EncryptionKey, p: Integer, q: Integer, alpha: Integer) -> Result<Self, Error> {
+        // TODO: validate ek, p, q, alpha are valid
 
-        // u = lambda^-1 mod N
-        let u = lambda.invert_ref(ek.n()).ok_or(Reason::InvalidPQ)?.into();
-
-        let crt_mod_nn = utils::CrtExp::build_nn(&p, &q).ok_or(Reason::BuildFastExp)?;
-        let exp_n = crt_mod_nn.prepare_exponent(ek.n());
-        let exp_lambda = crt_mod_nn.prepare_exponent(&lambda);
-
-        let (_ek, dk) = NGen::keys_with_primes(
-            &utils::integer_to_bigint(p.clone()),
-            &utils::integer_to_bigint(q.clone()),
-            2048,
-        )
-        .unwrap();
-
-        Ok(Self {
-            ek,
-            lambda,
-            mu: u,
-            p,
-            q,
-            crt_mod_nn,
-            exp_n,
-            exp_lambda,
-            optimized_dk: dk,
-            optimized_ek: _ek,
-        })
+        Ok(Self { ek, p, q, alpha })
     }
 
+    /// Return a fix decryptoion key for testing
+    /// n size = 2048
+    /// alpha size = 448
+    pub fn sample() -> Self {
+        Self {
+            ek: EncryptionKey::sample(),
+            p: Integer::from_str_radix("352b408f842f95ff7b042028afbd2a9312066e4e41d105e8ca2e162686c05908199e14805579c1a180aba9b20ec3e6d86e77be0cf0cc92212932606089bce6366a978b45e139d2b4abfa86e4fc198f3710d571988b39a050f0d0d857caabb74347d069c7f30d8a93db788abc1814caf5fd755df47391a8f350f85b1c522c7d5b", 16).unwrap(),
+            q: Integer::from_str_radix("ae553897573c0513948d2430f88e41120d9bfe9dacfcb0213bdb51c2880e388f5966d272cb97dd88666d2a921748ead1f787067f1c758f334a5ecefafb6afdbf3c0ffd2632d49d0448ef314d95c0b92711ebe1bc40b031e300f7cb2a78520e130446f7f4bc014253b47627dee93094c8907c67fe0681bc24ebfd57e5b241d95f", 16).unwrap(),
+            alpha: Integer::from_str_radix("7ffeabae28c7c128fab071c9f379387da9b8d4ce576c6f5af837d676a89109b7461ea3376a52b5a38ffcd40eb55dab3478b5fe94579512e9", 16).unwrap() ,
+        }
+    }
+}
+
+impl DecryptionKey {
     /// Decrypts the ciphertext, returns plaintext in `{-N/2, .., N_2}`
+    ///
+    /// plaintext = L(c^(2*alpha) mod N^2, N) * (2*alpha)^{-1} mod N
+    /// where: L(u, N) = (u - 1) / N (mod)
     pub fn decrypt(&self, c: &Ciphertext) -> Result<Plaintext, Error> {
-        if !utils::in_mult_group(c, self.ek.nn()) {
-            return Err(Reason::Decrypt.into());
+        let two_alpha = Integer::from(2) * &self.alpha;
+
+        // L(c^(2*alpha) mod N^2, N)
+        let u = c
+            .clone()
+            .pow_mod(&two_alpha, self.nn())
+            .map_err(|_| Error(Reason::Bug(Bug::PowModUndef)))?;
+        // TODO: do we need to check u % N^2 == 1?
+        // assert_eq!(u.clone() % self.nn(), Integer::from(1));
+
+        let l = (u - 1) / self.n();
+
+        // (2 * alpha)^{-1} mod N
+        let two_alpha_inv = two_alpha
+            .invert(self.n())
+            .map_err(|_| Error(Reason::Bug(Bug::InvertUndef)))?;
+
+        // plaintext = L(c^(2*alpha) mod N^2, N) * (2*alpha)^{-1} mod N
+        let plaintext = l * &two_alpha_inv % self.n();
+
+        // make sure plaintext is positive
+        if plaintext > *self.half_n() {
+            Ok(plaintext - self.n())
+        } else {
+            Ok(plaintext)
         }
-        let _c = RawCiphertext::new(utils::integer_to_bigint(c.clone()));
-        let plaintext = OptimizedPaillier::decrypt(&self.optimized_dk, _c);
-        let plaintext_integer =
-            utils::bigint_to_integer(RawPlaintext::to_bigint(&plaintext.clone()));
-        Ok(plaintext_integer)
     }
 
     /// Encrypts a plaintext `x` in `{-N/2, .., N/2}` with `nonce` from `Z*_n`
@@ -146,15 +235,11 @@ impl DecryptionKey {
     ///
     /// Returns error if inputs are not in specified range
     pub fn encrypt_with(&self, x: &Plaintext, nonce: &Nonce) -> Result<Ciphertext, Error> {
-        if !self.ek.in_signed_group(x) || !utils::in_mult_group(nonce, self.n()) {
-            return Err(Reason::Encrypt.into());
-        }
+        // TODO: encrypt using Chinese Remainder Theorem
 
-        let plt_as_u64 = x.to_u64().ok_or(Reason::Encrypt)?;
-        let ciphertext = OptimizedPaillier::encrypt(&self.optimized_ek, plt_as_u64);
-        let ciphertext_integer = utils::bigint_to_integer(ciphertext.raw.clone());
-
-        Ok(ciphertext_integer)
+        self.ek
+            .encrypt_with(x, nonce)
+            .map_err(|_| Error(Reason::Bug(Bug::PowModUndef)))
     }
 
     /// Encrypts the plaintext `x` in `{-N/2, .., N_2}`
@@ -169,9 +254,11 @@ impl DecryptionKey {
         rng: &mut (impl RngCore + CryptoRng),
         x: &Plaintext,
     ) -> Result<(Ciphertext, Nonce), Error> {
-        let nonce = utils::sample_in_mult_group(rng, self.ek.n());
-        let ciphertext = self.encrypt_with(x, &nonce)?;
-        Ok((ciphertext, nonce))
+        // TODO: encrypt using Chinese Remainder Theorem
+
+        self.ek
+            .encrypt_with_random(rng, x)
+            .map_err(|_| Error(Reason::Bug(Bug::PowModUndef)))
     }
 
     /// Homomorphic multiplication of scalar at ciphertext
@@ -182,130 +269,34 @@ impl DecryptionKey {
     /// omul(a, Enc(c)) = Enc(a * c)
     /// ```
     pub fn omul(&self, scalar: &Integer, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
-        if !utils::in_mult_group_abs(scalar, self.n())
-            || !utils::in_mult_group(ciphertext, self.ek.nn())
-        {
-            return Err(Reason::Ops.into());
-        }
+        // TODO: omul using Chinese Remainder Theorem
 
-        let scalar_bigint = utils::integer_to_bigint(scalar.clone());
-        let ciphertext_raw = RawCiphertext::new(utils::integer_to_bigint(ciphertext.clone()));
-        let result = self.optimized_dk.omul(&scalar_bigint, &ciphertext_raw);
-        Ok(utils::bigint_to_integer(result.to_bigint()))
-    }
-
-    /// Returns a (public) encryption key corresponding to the (secret) decryption key
-    pub fn encryption_key(&self) -> &EncryptionKey {
-        &self.ek
-    }
-
-    /// The Paillier modulus
-    pub fn n(&self) -> &Integer {
-        self.ek.n()
-    }
-
-    /// The Paillier `lambda`
-    pub fn lambda(&self) -> &Integer {
-        &self.lambda
-    }
-
-    /// The Paillier `mu`
-    pub fn mu(&self) -> &Integer {
-        &self.mu
-    }
-
-    /// Prime `p`
-    pub fn p(&self) -> &Integer {
-        &self.p
-    }
-    /// Prime `q`
-    pub fn q(&self) -> &Integer {
-        &self.q
-    }
-
-    /// Bits length of smaller prime (`p` or `q`)
-    pub fn bits_length(&self) -> u32 {
-        self.p.significant_bits().min(self.q.significant_bits())
+        self.ek.omul(scalar, ciphertext)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use rand_dev::DevRng;
+    use rug::Integer;
 
-    fn setup() -> DecryptionKey {
-        // Using two large primes for testing
-        let p = Integer::from(15485863);
-        let q = Integer::from(15485867);
-        DecryptionKey::from_primes(p, q).unwrap()
-    }
+    use crate::decryption_key::DecryptionKey;
 
-    #[test]
-    fn test_encrypt_decrypt() {
-        let dk = setup();
-        let mut rng = DevRng::new();
-        let plaintext = Integer::from(5);
+    // #[test]
+    // fn test_key_generation() {
+    //     let mut rngs = rand::thread_rng();
+    //     let n_size = 2048;
+    //     let a_size = 448;
 
-        let (ciphertext, _) = dk.encrypt_with_random(&mut rng, &plaintext).unwrap();
-        let decrypted = dk.decrypt(&ciphertext).unwrap();
-        assert_eq!(decrypted, plaintext);
-    }
+    //     let dk = DecryptionKey::generate(&mut rngs, n_size, a_size).unwrap();
+
+    //     println!("{:?}", dk);
+    // }
 
     #[test]
-    fn test_homomorphic_add() {
-        let dk = setup();
-        let ek = dk.encryption_key();
-        let mut rng = DevRng::new();
+    fn test_sample_decryption_key() {
+        let dk = DecryptionKey::sample();
 
-        let p1 = Integer::from(3);
-        let p2 = Integer::from(4);
-
-        let (c1, _) = dk.encrypt_with_random(&mut rng, &p1).unwrap();
-        let (c2, _) = dk.encrypt_with_random(&mut rng, &p2).unwrap();
-
-        let c_sum = ek.oadd(&c1, &c2).unwrap();
-        let decrypted = dk.decrypt(&c_sum).unwrap();
-        assert_eq!(decrypted, p1 + p2);
-    }
-
-    #[test]
-    fn test_homomorphic_mul() {
-        let dk = setup();
-        let mut rng = DevRng::new();
-
-        let plaintext = Integer::from(5);
-        let scalar = Integer::from(3);
-
-        let (ciphertext, _) = dk.encrypt_with_random(&mut rng, &plaintext).unwrap();
-        let result = dk.omul(&scalar, &ciphertext).unwrap();
-        let decrypted = dk.decrypt(&result).unwrap();
-        assert_eq!(decrypted, plaintext * scalar);
-    }
-
-    #[test]
-    fn test_homomorphic_neg() {
-        let dk = setup();
-        let ek = dk.encryption_key();
-        let mut rng = DevRng::new();
-
-        let plaintext = Integer::from(5);
-        let (ciphertext, _) = dk.encrypt_with_random(&mut rng, &plaintext).unwrap();
-
-        let neg = ek.oneg(&ciphertext).unwrap();
-        let decrypted = dk.decrypt(&neg).unwrap();
-        assert_eq!(decrypted, -plaintext);
-    }
-
-    #[test]
-    fn test_key_generation() {
-        let mut rng = DevRng::new();
-        let dk = DecryptionKey::generate(&mut rng).unwrap();
-
-        // Test basic encryption/decryption with generated key
-        let plaintext = Integer::from(42);
-        let (ciphertext, _) = dk.encrypt_with_random(&mut rng, &plaintext).unwrap();
-        let decrypted = dk.decrypt(&ciphertext).unwrap();
-        assert_eq!(decrypted, plaintext);
+        assert_eq!(dk.p().clone() % 4, Integer::from(3));
+        assert_eq!(dk.q().clone() % 4, Integer::from(3));
     }
 }
