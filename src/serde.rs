@@ -1,6 +1,6 @@
 use crate::AnyEncryptionKey;
 use crate::{DecryptionKey, EncryptionKey};
-use rug::{rand, Integer};
+use rug::Integer;
 
 impl serde::Serialize for EncryptionKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

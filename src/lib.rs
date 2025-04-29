@@ -43,10 +43,6 @@ enum Bug {
     PowModUndef,
     #[error("invert undefined")]
     InvertUndef,
-    #[error("invalid encryption key")]
-    InvalidEncryptionKey,
-    #[error("invalid decryption key")]
-    InvalidDecryptionKey,
 }
 
 impl From<Bug> for Error {

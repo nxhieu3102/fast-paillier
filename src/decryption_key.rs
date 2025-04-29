@@ -1,5 +1,5 @@
 use rand_core::{CryptoRng, RngCore};
-use rug::{Complete, Integer};
+use rug::Integer;
 
 use crate::{utils, AnyEncryptionKey, Bug, Ciphertext, EncryptionKey, Nonce, Plaintext};
 use crate::{Error, Reason};
