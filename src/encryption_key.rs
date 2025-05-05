@@ -3,7 +3,8 @@ use rug::{Complete, Integer};
 
 use crate::{utils, Ciphertext, Nonce, Plaintext};
 use crate::{Bug, Error, Reason};
-
+use crate::precomputed_table::PrecomputeTable;
+// use crate::utils;
 /// Paillier encryption key
 #[derive(Clone, Debug)]
 pub struct EncryptionKey {
@@ -45,7 +46,7 @@ impl EncryptionKey {
     pub fn new(n_size: u32, a_size: u32, h: Integer, n: Integer) -> Result<Self, Error> {
         let nounce_size = a_size;
         let nn = n.clone() * &n;
-        let half_n = n.clone() >> 1u32;
+        let half_n: Integer = n.clone() >> 1u32;
         let neg_half_n = -half_n.clone();
         let h_pow_n = h.clone().pow_mod(&n, &nn).map_err(|_| Bug::PowModUndef)?;
 
@@ -148,7 +149,7 @@ impl EncryptionKey {
         };
 
         // a = (1 + N)^x mod N^2 = (1 + xN) mod N^2
-        let a = (Integer::ONE + (&x * self.n()).complete()) % self.nn();
+        let a = (Integer::from(1) + (&x * self.n()).complete()) % self.nn();
         // b = (h^nonce mod N)^N mod N^2 = (h^n mod N^2)^nonce mod N^2 = h_pow_n^nonce mod N^2
         let b = self
             .h_pow_n()
@@ -227,5 +228,56 @@ impl EncryptionKey {
     /// ```
     pub fn oneg(&self, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
         Ok(ciphertext.invert_ref(self.nn()).ok_or(Reason::Ops)?.into())
+    }
+}
+
+impl EncryptionKey {
+    /// Encrypts the plaintext using a precomputed table for faster exponentiation
+    pub fn encrypt_with_precompute_table(&self, precompute_table: &PrecomputeTable, m: &Plaintext) -> Result<Ciphertext, Error> {
+        let r = utils::sample_with_size(&mut rand_core::OsRng, self.nounce_size());
+         // rn = hn^r (mod n^2)
+        // use Self::pow() instead of BigInt::mod_pow()
+        // so, we replace `let rn = BigInt::mod_pow(&ek.hn, &r.0, &ek.nn);` by
+        let rn = Self::pow(precompute_table, &r);
+
+        // gm = (1 + m*n) (mod n^2)
+        let gm = ((m * &self.n).complete() + 1) % &self.nn;
+
+        let c = (gm * rn) % &self.nn;
+        Ok(c)
+    }
+
+    fn pow(precompute_table: &PrecomputeTable, pow: &Integer) -> Integer {
+        let pow_blocks = Self::convert_into_block(&precompute_table, &pow);
+        let mut result = Integer::from(1);
+
+        for (id, pow_block) in pow_blocks.iter().enumerate() {
+            result = (result * &precompute_table.table()[id][*pow_block]).modulo(&precompute_table.modulo());
+        }
+
+        result
+    }
+
+    fn convert_into_block(precompute_table: &PrecomputeTable, x: &Integer) -> Vec<usize> {
+        // convert bigint --> list of bits
+        // block_size bits --> group (right to left)
+        // each group --> usize/u64/...
+        let block_size = precompute_table.block_size();
+        let pow_size = precompute_table.pow_size();
+        let num_block = pow_size / block_size + if (pow_size % block_size) > 0 { 1 } else { 0 };
+
+        let mut result = vec![0; num_block];
+
+        for bit_id in 0..pow_size {
+            if x.get_bit(bit_id as u32) {
+                // bit_id in is the (bit_id % block_size) bit of group (bit_id / block_size)
+                // turn on the (bit_id % block_size) bit of group (bit_id / block_size)
+                let block_id = bit_id / block_size;
+                let bit_id = bit_id % block_size;
+                result[block_id] |= 1 << bit_id;
+            }
+        }
+
+        result
     }
 }

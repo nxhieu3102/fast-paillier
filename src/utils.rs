@@ -7,6 +7,7 @@ use rug::{Assign, Complete, Integer};
 
 mod small_primes;
 
+
 /// Wraps any randomness source that implements [`rand_core::RngCore`] and makes
 /// it compatible with [`rug::rand`].
 pub fn external_rand(rng: &mut impl RngCore) -> rug::rand::ThreadRandState {
@@ -344,5 +345,17 @@ mod test {
         let d = Integer::from(6);
         let vec = vec![&a, &b, &c, &d];
         assert_eq!(super::check_coprime(&vec), false);
+    }
+}
+
+use crate::{EncryptionKey, utils};
+/// Represents randomness used in encryption
+#[derive(Debug, PartialEq)]
+pub struct Randomness(pub Integer);
+
+impl Randomness {
+    /// Samples a random value suitable for encryption with the given encryption key
+    pub fn sample(ek: &EncryptionKey) -> Randomness {
+        Randomness(utils::sample_with_size(&mut rand_core::OsRng, ek.a_size()))
     }
 }

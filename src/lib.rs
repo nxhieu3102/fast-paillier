@@ -3,6 +3,7 @@
 
 mod decryption_key;
 mod encryption_key;
+mod precomputed_table;
 pub mod utils;
 
 #[cfg(feature = "serde")]
@@ -303,9 +304,9 @@ mod tests {
         let dk = DecryptionKey::sample();
         let ek = dk.encryption_key();
 
-        let plaintext = Integer::from(123);
+        let plaintext = Integer::from(10);
         let (ciphertext, nonce) = ek.encrypt_with_random(&mut rng, &plaintext).unwrap();
-
+        // println!("ciphertext: {}", ciphertext);
         match dk.decrypt(&ciphertext) {
             Ok(decrypted) => {
                 assert_eq!(decrypted, plaintext);
