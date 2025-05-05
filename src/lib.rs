@@ -305,7 +305,7 @@ mod tests {
     fn test_enc_dec() {
         let mut rng = rand::thread_rng();
 
-        let dk = DecryptionKey::sample();
+        let dk = DecryptionKey::sample_128();
         let ek = dk.encryption_key();
 
         let plaintext = Integer::from(10);

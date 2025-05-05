@@ -25,7 +25,7 @@ fn encryption(c: &mut criterion::Criterion) {
     let p = Integer::from_str_radix(P, 16).unwrap();
     let q = Integer::from_str_radix(Q, 16).unwrap();
 
-    let dk: fast_paillier::DecryptionKey = fast_paillier::DecryptionKey::sample();
+    let dk: fast_paillier::DecryptionKey = fast_paillier::DecryptionKey::sample_128();
     let ek = dk.encryption_key();
 
     let mut group = c.benchmark_group("Encrypt");
@@ -83,7 +83,7 @@ fn decryption(c: &mut criterion::Criterion) {
     let p = Integer::from_str_radix(P, 16).unwrap();
     let q = Integer::from_str_radix(Q, 16).unwrap();
 
-    let dk = fast_paillier::DecryptionKey::sample();
+    let dk = fast_paillier::DecryptionKey::sample_128();
     let ek = dk.encryption_key();
 
     let mut group = c.benchmark_group("Decrypt");
@@ -119,7 +119,7 @@ fn decryption(c: &mut criterion::Criterion) {
 fn omul(c: &mut criterion::Criterion) {
     let mut rng = rand_dev::DevRng::new();
 
-    let dk = fast_paillier::DecryptionKey::sample();
+    let dk = fast_paillier::DecryptionKey::sample_128();
     let ek = dk.encryption_key();
 
     let mut group = c.benchmark_group("OMul");
