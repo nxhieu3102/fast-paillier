@@ -185,12 +185,24 @@ impl DecryptionKey {
     /// Return a fix decryptoion key for testing
     /// n size = 2048
     /// alpha size = 448
-    pub fn sample() -> Self {
+    pub fn sample_112() -> Self {
         Self {
-            ek: EncryptionKey::sample(),
+            ek: EncryptionKey::sample_112(),
             p: Integer::from_str_radix("352b408f842f95ff7b042028afbd2a9312066e4e41d105e8ca2e162686c05908199e14805579c1a180aba9b20ec3e6d86e77be0cf0cc92212932606089bce6366a978b45e139d2b4abfa86e4fc198f3710d571988b39a050f0d0d857caabb74347d069c7f30d8a93db788abc1814caf5fd755df47391a8f350f85b1c522c7d5b", 16).unwrap(),
             q: Integer::from_str_radix("ae553897573c0513948d2430f88e41120d9bfe9dacfcb0213bdb51c2880e388f5966d272cb97dd88666d2a921748ead1f787067f1c758f334a5ecefafb6afdbf3c0ffd2632d49d0448ef314d95c0b92711ebe1bc40b031e300f7cb2a78520e130446f7f4bc014253b47627dee93094c8907c67fe0681bc24ebfd57e5b241d95f", 16).unwrap(),
             alpha: Integer::from_str_radix("7ffeabae28c7c128fab071c9f379387da9b8d4ce576c6f5af837d676a89109b7461ea3376a52b5a38ffcd40eb55dab3478b5fe94579512e9", 16).unwrap() ,
+        }
+    }
+
+    /// Return a fix decryptoion key for testing
+    /// n size = 3072
+    /// alpha size = 512
+    pub fn sample_128() -> Self {
+        Self {
+            ek: EncryptionKey::sample_128(),
+            p: Integer::from_str_radix("839604457153382033720003326654997544118596113373609234678587338149161354994347914267636071525512710050467656632783964681190975719416301416318441172804941007905632800346097169656312745185266337930499545855863665404948257291631593104963187840014286605100283580915042595051907308234079655979670315278879818661888922549182364361303144823692211219484740422088705064262682566575832813433144012908049224984636749169319450779863173356117467976440703403995243646456725591", 16).unwrap(),
+            q: Integer::from_str_radix("743801265514881103483768821893245925378134035335216611973520259829027656422723219709692160610663116273054702837694488638022069484892336461456218827736375462047842812789380167552340656549341374717474433671272564983828365484016261471809658880542451263854116138619518659990303082479785471490469802954931219698744200396168471293146272351181923597139787506343883140313058926610440737746588145351090170254693560055414792516210777763575309516717116560514389624057706987", 16).unwrap(),
+            alpha: Integer::from_str_radix("4741906189692490942881550526551134583945588334769176626212802369003989678803877719143415897043820272564409651596590439168843375671085094013575119097115737", 16).unwrap(),
         }
     }
 }
@@ -281,20 +293,20 @@ mod tests {
 
     use crate::decryption_key::DecryptionKey;
 
-    // #[test]
-    // fn test_key_generation() {
-    //     let mut rngs = rand::thread_rng();
-    //     let n_size = 2048;
-    //     let a_size = 448;
+    #[test]
+    fn test_key_generation() {
+        let mut rngs = rand::thread_rng();
+        let n_size = 3072;
+        let a_size = 512;
 
-    //     let dk = DecryptionKey::generate(&mut rngs, n_size, a_size).unwrap();
+        let dk = DecryptionKey::generate(&mut rngs, n_size, a_size).unwrap();
 
-    //     println!("{:?}", dk);
-    // }
+        println!("{:?}", dk);
+    }
 
     #[test]
     fn test_sample_decryption_key() {
-        let dk = DecryptionKey::sample();
+        let dk = DecryptionKey::sample_128();
 
         assert_eq!(dk.p().clone() % 4, Integer::from(3));
         assert_eq!(dk.q().clone() % 4, Integer::from(3));
