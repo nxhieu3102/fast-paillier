@@ -221,7 +221,7 @@ impl DecryptionKey {
             .pow_mod(&two_alpha, self.nn())
             .map_err(|_| Error(Reason::Bug(Bug::PowModUndef)))?;
         // TODO: do we need to check u % N^2 == 1?
-        // assert_eq!(u.clone() % self.nn(), Integer::from(1));
+        // assert_eq!(u.clone() % self.nn(), Integer::ONE);
 
         let l = (u - 1) / self.n();
 

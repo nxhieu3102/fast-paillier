@@ -172,7 +172,7 @@ mod tests {
     }
 
     fn test_dk() -> DecryptionKey { 
-        DecryptionKey::sample()
+        DecryptionKey::sample_128()
     }
 
 
@@ -182,7 +182,6 @@ mod tests {
         let dk = test_dk();
         let ek = dk.encryption_key();
         let base = ek.h_pow_n();
-        // block_size > 10 --> memory error
         let block_size = 5 as usize;
         let pow_size = ek.a_size() as usize;
         let modulo: &Integer = ek.nn();
@@ -190,7 +189,8 @@ mod tests {
         // pow <= 2^pow_size - 1
         let precompute = PrecomputeTable::new(base.clone(), block_size, pow_size, modulo.clone());
         let m = Integer::from(10);
-        let c = ek.encrypt_with_precompute_table(&precompute, &m).unwrap();
+        let mut rng = rand_dev::DevRng::new();
+        let c = ek.encrypt_with_precompute_table(&mut rng, &precompute, &m).unwrap();
         // println!("ciphertext: {}", c);
         let recovered_m = dk.decrypt(&c).unwrap();
 
@@ -203,7 +203,6 @@ mod tests {
         let dk = test_dk();
         let ek = dk.encryption_key();
         let base = ek.h_pow_n();
-        // block_size > 10 --> memory error
         let block_size = 10 as usize;
         let pow_size = ek.a_size() as usize;
         let modulo: &Integer = ek.nn();
@@ -215,7 +214,8 @@ mod tests {
         // pow <= 2^pow_size - 1
         let precompute = PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
         let m = Integer::from(10);
-        let c = ek.encrypt_with_precompute_table(&precompute, &m).unwrap();
+        let mut rng = rand_dev::DevRng::new();
+        let c = ek.encrypt_with_precompute_table(&mut rng, &precompute, &m).unwrap();
         let recovered_m = dk.decrypt(&c).unwrap();
         assert_eq!(recovered_m, m);
     }

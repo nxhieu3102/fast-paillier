@@ -1,10 +1,9 @@
+use crate::precomputed_table::PrecomputeTable;
+use crate::{utils, Ciphertext, Nonce, Plaintext};
+use crate::{Bug, Error, Reason};
 use rand_core::{CryptoRng, RngCore};
 use rug::{Complete, Integer};
 
-use crate::{utils, Ciphertext, Nonce, Plaintext};
-use crate::{Bug, Error, Reason};
-use crate::precomputed_table::PrecomputeTable;
-// use crate::utils;
 /// Paillier encryption key
 #[derive(Clone, Debug)]
 pub struct EncryptionKey {
@@ -46,7 +45,7 @@ impl EncryptionKey {
     pub fn new(n_size: u32, a_size: u32, h: Integer, n: Integer) -> Result<Self, Error> {
         let nounce_size = a_size;
         let nn = n.clone() * &n;
-        let half_n: Integer = n.clone() >> 1u32;
+        let half_n = n.clone() >> 1u32;
         let neg_half_n = -half_n.clone();
         let h_pow_n = h.clone().pow_mod(&n, &nn).map_err(|_| Bug::PowModUndef)?;
 
@@ -157,11 +156,13 @@ impl EncryptionKey {
         let x = if x.cmp0().is_ge() {
             x.clone()
         } else {
-            (x + self.n()).complete()
+            let sum = x + self.n();
+            Integer::from(sum)
         };
 
         // a = (1 + N)^x mod N^2 = (1 + xN) mod N^2
-        let a = (Integer::from(1) + (&x * self.n()).complete()) % self.nn();
+        let xn = &x * self.n();
+        let a = (Integer::ONE + Integer::from(xn)) % self.nn();
         // b = (h^nonce mod N)^N mod N^2 = (h^n mod N^2)^nonce mod N^2 = h_pow_n^nonce mod N^2
         let b = self
             .h_pow_n()
@@ -169,7 +170,7 @@ impl EncryptionKey {
             .pow_mod(nonce, self.nn())
             .map_err(|_| Bug::PowModUndef)?;
 
-        let c = (a * b).modulo(self.nn());
+        let c = (a * b) % self.nn();
         Ok(c)
     }
 
@@ -245,32 +246,36 @@ impl EncryptionKey {
 
 impl EncryptionKey {
     /// Encrypts the plaintext using a precomputed table for faster exponentiation
-    pub fn encrypt_with_precompute_table(&self, precompute_table: &PrecomputeTable, m: &Plaintext) -> Result<Ciphertext, Error> {
-        let r = utils::sample_with_size(&mut rand_core::OsRng, self.nounce_size());
-         // rn = hn^r (mod n^2)
-        // use Self::pow() instead of BigInt::mod_pow()
-        // so, we replace `let rn = BigInt::mod_pow(&ek.hn, &r.0, &ek.nn);` by
-        let rn = Self::pow(precompute_table, &r);
+    pub fn encrypt_with_precompute_table(
+        &self,
+        rng: &mut (impl RngCore + CryptoRng),
+        precompute_table: &PrecomputeTable,
+        m: &Plaintext,
+    ) -> Result<Ciphertext, Error> {
+        let r = utils::sample_with_size(rng, self.nounce_size());
+        // h_pow_rn = (h^n)^r = h^(n*r) mod n^2
+        let h_pow_rn = Self::pow(precompute_table, &r);
 
-        // gm = (1 + m*n) (mod n^2)
-        let gm = ((m * &self.n).complete() + 1) % &self.nn;
+        // g_pow_m = g^m = (1 + n) ^ m = (1 + n * m) mod n^2
+        let g_pow_m = ((m * &self.n).complete() + 1) % &self.nn;
 
-        let c = (gm * rn) % &self.nn;
+        let c = (g_pow_m * h_pow_rn) % &self.nn;
         Ok(c)
     }
 
     fn pow(precompute_table: &PrecomputeTable, pow: &Integer) -> Integer {
-        let pow_blocks = Self::convert_into_block(&precompute_table, &pow);
+        let pow_blocks = Self::convert_into_blocks(&precompute_table, &pow);
         let mut result = Integer::from(1);
 
         for (id, pow_block) in pow_blocks.iter().enumerate() {
-            result = (result * &precompute_table.table()[id][*pow_block]).modulo(&precompute_table.modulo());
+            result = (result * &precompute_table.table()[id][*pow_block])
+                .modulo(&precompute_table.modulo());
         }
 
         result
     }
 
-    fn convert_into_block(precompute_table: &PrecomputeTable, x: &Integer) -> Vec<usize> {
+    fn convert_into_blocks(precompute_table: &PrecomputeTable, x: &Integer) -> Vec<usize> {
         // convert bigint --> list of bits
         // block_size bits --> group (right to left)
         // each group --> usize/u64/...

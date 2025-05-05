@@ -347,15 +347,3 @@ mod test {
         assert_eq!(super::check_coprime(&vec), false);
     }
 }
-
-use crate::{EncryptionKey, utils};
-/// Represents randomness used in encryption
-#[derive(Debug, PartialEq)]
-pub struct Randomness(pub Integer);
-
-impl Randomness {
-    /// Samples a random value suitable for encryption with the given encryption key
-    pub fn sample(ek: &EncryptionKey) -> Randomness {
-        Randomness(utils::sample_with_size(&mut rand_core::OsRng, ek.a_size()))
-    }
-}

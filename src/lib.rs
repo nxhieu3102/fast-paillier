@@ -310,7 +310,6 @@ mod tests {
 
         let plaintext = Integer::from(10);
         let (ciphertext, nonce) = ek.encrypt_with_random(&mut rng, &plaintext).unwrap();
-        // println!("ciphertext: {}", ciphertext);
         match dk.decrypt(&ciphertext) {
             Ok(decrypted) => {
                 assert_eq!(decrypted, plaintext);

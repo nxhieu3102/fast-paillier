@@ -3,7 +3,7 @@ use rug::Integer;
 use bencher::{benchmark_group, benchmark_main, Bencher};
 
 fn encryption(b: &mut Bencher) {;
-    let ek = EncryptionKey::sample();
+    let ek = EncryptionKey::sample_112();
     
     b.iter(|| {
         let m = Integer::from(10);
