@@ -1,5 +1,5 @@
-use std::mem;
 use rug::{Complete, Integer};
+use std::mem;
 
 /// A table for precomputed values to speed up Paillier encryption operations.
 /// This table stores modular exponentiations for faster computation of cryptographic operations.
@@ -16,80 +16,78 @@ impl PrecomputeTable {
         block_size: usize,
         pow_size: usize,
         modulo: &Integer,
-    ) -> Vec<Vec<Integer>>
-    {
+    ) -> Vec<Vec<Integer>> {
         let num_blocks = pow_size / block_size + if (pow_size % block_size) > 0 { 1 } else { 0 };
         let max_block_value = (1 << block_size) - 1;
 
-        // table[i][j] is 
+        // table[i][j] is
         // table[i][j] = [base^(2^(i*block_size))]^j % modulo
-        
+
         let mut table = vec![vec![Integer::from(1); max_block_value + 1]; num_blocks + 1];
 
         for i in 0..=num_blocks {
             for j in 0..=max_block_value {
-                let tmp1 = Integer::from(2).pow_mod(
-                    &Integer::from((i * block_size) as u32),
-                    modulo,
-                ).unwrap();
+                // tmp1 = 2^(i*block_size) % modulo
+                let tmp1 = Integer::from(2)
+                    .pow_mod(&Integer::from((i * block_size) as u32), modulo)
+                    .unwrap();
+                // tmp2 = base^(tmp1) % modulo
                 let tmp2: Integer = base.clone().pow_mod(&tmp1, modulo).unwrap().into();
-                let tmp3: Integer = tmp2.clone().pow_mod(&Integer::from(j as u32), modulo).unwrap().into();
+                // tmp3 = tmp2^j % modulo
+                let tmp3: Integer = tmp2
+                    .clone()
+                    .pow_mod(&Integer::from(j as u32), modulo)
+                    .unwrap()
+                    .into();
                 table[i][j] = tmp3;
             }
         }
-
         table
     }
 
     fn calculate_table_dp(
-        g: &Integer,
+        base: &Integer,
         block_size: usize,
         pow_size: usize,
         modulo: &Integer,
-    ) -> Vec<Vec<Integer>>
-    {
-        // let i_min = 1 as usize;
-        let i_max = pow_size / block_size + if (pow_size % block_size) > 0 { 1 } else { 0 };
-        // let j_min = 0 as usize;
-        let j_max = (1 << block_size) - 1;
-        // table[i][j] = [g^(2^(ib))]^j mod modulo
-        let mut table = vec![vec![Integer::from(1); j_max + 1]; i_max + 1];
+    ) -> Vec<Vec<Integer>> {
+        let num_blocks = pow_size / block_size + if (pow_size % block_size) > 0 { 1 } else { 0 };
+        let max_block_value = (1 << block_size) - 1;
 
-        // base case 0: i = 0, j = 0, table[0][0] = 1
+        // Initialize table: table[i][j] = (base^(2^(i*block_size)))^j % modulo
+        let mut table = vec![vec![Integer::from(0); max_block_value + 1]; num_blocks + 1];
 
-        // base case 1: i = 0, for all j, table[0][j] = [g^(2^(0b))]^j mod modulo = g^j mod modulo
-        // table[0][j] = table[0][j - 1] * g mod modulo
-        for j in 1..=j_max {
-            let product = (&table[0][j - 1] * g).complete();
-            table[0][j] = product.modulo(modulo);
+        // Handle j=0 case: any number raised to 0 is 1
+        for i in 0..=num_blocks {
+            table[i][0] = Integer::from(1);
         }
 
-        // base case 2: j = 0, for all i, table[i][0] = [g^(2^(ib))]^0 mod modulo = 1
-        // already done because by default, all elements in table are 1
-
-        // for all i > 0, table[i][1] = (table[i - 1][1])^(2^b), where b is block_size
-        // 2^b as a constant
-        let two_pow_b = Integer::from(2).pow_mod(
-            &Integer::from(block_size as u32),
-            modulo,
-        ).unwrap();
-
-        for i in 1..=i_max {
-            table[i][1] = table[i - 1][1].pow_mod_ref(&two_pow_b, modulo).unwrap().into();
+        // Precompute 2^(i*block_size) % modulo for each i
+        let mut pow_2 = vec![Integer::from(1); num_blocks + 1];
+        for i in 1..=num_blocks {
+            // Compute 2^(i*block_size) = 2^((i-1)*block_size) * 2^block_size
+            let prev = &pow_2[i - 1];
+            let block_exp = Integer::from(2)
+                .pow_mod(&Integer::from(block_size as u32), modulo)
+                .unwrap();
+            pow_2[i] = (prev * &block_exp).complete().modulo(modulo);
         }
 
+        // Compute table[i][j]
+        for i in 0..=num_blocks {
+            // Compute tmp2 = base^(2^(i*block_size)) % modulo
+            let tmp2: Integer = base.pow_mod_ref(&pow_2[i], modulo).unwrap().into();
 
-        // for i >= 1 and j >= 2: table[i][j] = table[i][j - 1] . table[i][1]
-        for i in 1..=i_max {
-            for j in 2..=j_max {
-                let product = (&table[i][j - 1] * &table[i][1]).complete();
-                table[i][j] = product.modulo(modulo);
+            // Compute table[i][j] iteratively for j >= 1
+            table[i][1] = tmp2.clone();
+            for j in 2..=max_block_value {
+                // table[i][j] = table[i][j-1] * tmp2 % modulo
+                table[i][j] = (&table[i][j - 1] * &tmp2).complete().modulo(modulo);
             }
         }
 
         table
     }
-
     /// Creates a new precomputed table using the standard calculation method.
     ///
     /// # Arguments
@@ -158,28 +156,19 @@ impl PrecomputeTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::EncryptionKey;
     use crate::DecryptionKey;
 
-    fn test_ek() -> EncryptionKey {
-        let p: Integer = Integer::from_str_radix("58840286422659759040264722526723163115947585338232456760625037250347772947158924579397568010160401824142812407358290596642469990113927112749530655037092283267003056548558029709374658607773847180644927643815153088281601855305598381448858360794678123176275437646277062199420220697194572706984411597767662174219", 10).unwrap();
-        let q = Integer::from_str_radix("64569320288008737248616342555880093394368754507783709070327116553058977898351053473313292166959127254971093796968717357648354685162478156927773865332477516856906959367256797593402514551692581319610393653175392375527614160563282643144940815153885487175996514917461421149259641826709133924683180923570779884947", 10).unwrap();
-        let n = (&p * &q).complete();
-        let a_size = 448 as u32;
-        let h = Integer::from(2); // Define h as a simple value for testing
-
-        EncryptionKey::new(n.significant_bits(), a_size, h, n).unwrap()
-    }
-
-    fn test_dk() -> DecryptionKey { 
+    fn test_dk_with_128b() -> DecryptionKey {
         DecryptionKey::sample_128()
     }
 
-
+    fn test_dk_with_112b() -> DecryptionKey {
+        DecryptionKey::sample_112()
+    }
 
     #[test]
-    fn test_encryption_with_precompute() {
-        let dk = test_dk();
+    fn test_encryption_with_precompute_128b() {
+        let dk = test_dk_with_128b();
         let ek = dk.encryption_key();
         let base = ek.h_pow_n();
         let block_size = 5 as usize;
@@ -190,32 +179,65 @@ mod tests {
         let precompute = PrecomputeTable::new(base.clone(), block_size, pow_size, modulo.clone());
         let m = Integer::from(10);
         let mut rng = rand_dev::DevRng::new();
-        let c = ek.encrypt_with_precompute_table(&mut rng, &precompute, &m).unwrap();
-        // println!("ciphertext: {}", c);
+        let c = ek
+            .encrypt_with_precompute_table(&mut rng, &precompute, &m)
+            .unwrap();
         let recovered_m = dk.decrypt(&c).unwrap();
-
-        println!("recovered_m: {}", recovered_m);
         assert_eq!(recovered_m, m);
     }
 
     #[test]
-    fn test_encryption_with_precompute_dp() {
-        let dk = test_dk();
+    fn test_encryption_with_precompute_112b() {
+        let dk = test_dk_with_112b();
+        let ek = dk.encryption_key();
+        let base = ek.h_pow_n();
+        let block_size = 5 as usize;
+        let pow_size = ek.a_size() as usize;
+        let modulo: &Integer = ek.nn();
+        let precompute = PrecomputeTable::new(base.clone(), block_size, pow_size, modulo.clone());
+        let m = Integer::from(10);
+        let mut rng = rand_dev::DevRng::new();
+        let c = ek
+            .encrypt_with_precompute_table(&mut rng, &precompute, &m)
+            .unwrap();
+        let recovered_m = dk.decrypt(&c).unwrap();
+        assert_eq!(recovered_m, m);
+    }
+
+    #[test]
+    fn test_encryption_with_precompute_dp_128b() {
+        let dk = test_dk_with_128b();
         let ek = dk.encryption_key();
         let base = ek.h_pow_n();
         let block_size = 10 as usize;
         let pow_size = ek.a_size() as usize;
         let modulo: &Integer = ek.nn();
-
-        println!("base: {}", base);
-        println!("pow_size: {}", pow_size);
-        println!("modulo: {}", modulo);
-
-        // pow <= 2^pow_size - 1
-        let precompute = PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
+        let precompute =
+            PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
         let m = Integer::from(10);
         let mut rng = rand_dev::DevRng::new();
-        let c = ek.encrypt_with_precompute_table(&mut rng, &precompute, &m).unwrap();
+        let c = ek
+            .encrypt_with_precompute_table(&mut rng, &precompute, &m)
+            .unwrap();
+        let recovered_m = dk.decrypt(&c).unwrap();
+        assert_eq!(recovered_m, m);
+    }
+
+    #[test]
+    fn test_encryption_with_precompute_dp_112b() {
+        let dk = test_dk_with_112b();
+        let ek = dk.encryption_key();
+        let base = ek.h_pow_n();
+        let block_size = 10 as usize;
+        let pow_size = ek.a_size() as usize;
+        let modulo: &Integer = ek.nn();
+        let precompute =
+            PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
+        let m = Integer::from(10);
+        let mut rng = rand_dev::DevRng::new();
+        let c = ek
+            .encrypt_with_precompute_table(&mut rng, &precompute, &m)
+            .unwrap();
         let recovered_m = dk.decrypt(&c).unwrap();
         assert_eq!(recovered_m, m);
     }
@@ -232,9 +254,8 @@ mod tests {
         assert_eq!(table.block_size(), block_size);
         assert_eq!(table.pow_size(), pow_size);
         assert_eq!(*table.modulo(), modulo);
-        
-        // Verify dimensions
-        let expected_rows = pow_size / block_size + 1; // Ceiling of pow_size/block_size
+
+        let expected_rows = pow_size / block_size + 1;
         let expected_cols = 1 << block_size;
         let table_data = table.table();
         assert_eq!(table_data.len(), expected_rows);
@@ -250,14 +271,14 @@ mod tests {
         let pow_size = 16;
         let modulo = Integer::from(11);
 
-        let table: PrecomputeTable = PrecomputeTable::new_dp(g.clone(), block_size, pow_size, modulo.clone());
+        let table: PrecomputeTable =
+            PrecomputeTable::new_dp(g.clone(), block_size, pow_size, modulo.clone());
 
         assert_eq!(table.block_size(), block_size);
         assert_eq!(table.pow_size(), pow_size);
         assert_eq!(*table.modulo(), modulo);
-        
-        // Verify dimensions
-        let expected_rows = pow_size / block_size + 1; // Ceiling of pow_size/block_size
+
+        let expected_rows = pow_size / block_size + 1;
         let expected_cols = 1 << block_size;
         let table_data = table.table();
         assert_eq!(table_data.len(), expected_rows);
@@ -268,7 +289,6 @@ mod tests {
 
     #[test]
     fn test_table_values() {
-        // Use a small modulo and small values to test actual table values
         let g = Integer::from(2);
         let block_size = 2;
         let pow_size = 4;
@@ -277,30 +297,24 @@ mod tests {
         let table = PrecomputeTable::new(g.clone(), block_size, pow_size, modulo.clone());
         let table_data = table.table();
 
-        // Based on the observed values from debug printing, let's assert the correct values
-        
-        // First row (i=0)
-        assert_eq!(table_data[0][0], Integer::from(0));
-        assert_eq!(table_data[0][1], Integer::from(1));
+        assert_eq!(table_data[0][0], Integer::from(1));
+        assert_eq!(table_data[0][1], Integer::from(2));
         assert_eq!(table_data[0][2], Integer::from(4));
-        assert_eq!(table_data[0][3], Integer::from(2));
-        
-        // Second row (i=1)
-        assert_eq!(table_data[1][0], Integer::from(0));
-        assert_eq!(table_data[1][1], Integer::from(1));
+        assert_eq!(table_data[0][3], Integer::from(1));
+
+        assert_eq!(table_data[1][0], Integer::from(1));
+        assert_eq!(table_data[1][1], Integer::from(2));
         assert_eq!(table_data[1][2], Integer::from(4));
-        assert_eq!(table_data[1][3], Integer::from(2));
-        
-        // Third row (i=2)
-        assert_eq!(table_data[2][0], Integer::from(0));
-        assert_eq!(table_data[2][1], Integer::from(1));
+        assert_eq!(table_data[1][3], Integer::from(1));
+
+        assert_eq!(table_data[2][0], Integer::from(1));
+        assert_eq!(table_data[2][1], Integer::from(4));
         assert_eq!(table_data[2][2], Integer::from(2));
-        assert_eq!(table_data[2][3], Integer::from(4));
+        assert_eq!(table_data[2][3], Integer::from(1));
     }
 
     #[test]
     fn test_table_dp_values() {
-        // Use a small modulo and small values to test actual table values
         let g = Integer::from(2);
         let block_size = 2;
         let pow_size = 4;
@@ -309,42 +323,20 @@ mod tests {
         let table = PrecomputeTable::new_dp(g.clone(), block_size, pow_size, modulo.clone());
         let table_data = table.table();
 
-        // Test the base cases and a few computed values
-        // First row (i=0)
-        assert_eq!(table_data[0][0], Integer::from(1)); // Base case: j=0 => g^0 = 1
-        assert_eq!(table_data[0][1], Integer::from(2)); // g^1 mod 7 = 2
-        assert_eq!(table_data[0][2], Integer::from(4)); // g^2 mod 7 = 4
-        assert_eq!(table_data[0][3], Integer::from(1)); // g^3 mod 7 = 8 mod 7 = 1
-        
-        // Second row (i=1)
-        assert_eq!(table_data[1][0], Integer::from(1)); // Base case: j=0 => 1
-        
-        // For [1][1], the DP algorithm uses: table[i][1] = (table[i-1][1])^(2^b)
-        // table[1][1] = (table[0][1])^(2^2) = 2^4 = 16 mod 7 = 2
+        assert_eq!(table_data[0][0], Integer::from(1));
+        assert_eq!(table_data[0][1], Integer::from(2));
+        assert_eq!(table_data[0][2], Integer::from(4));
+        assert_eq!(table_data[0][3], Integer::from(1));
+
+        assert_eq!(table_data[1][0], Integer::from(1));
         assert_eq!(table_data[1][1], Integer::from(2));
-        
-        // For [1][2], the DP algorithm uses: table[i][j] = table[i][j-1] * table[i][1]
-        // table[1][2] = table[1][1] * table[1][1] = 2 * 2 = 4
         assert_eq!(table_data[1][2], Integer::from(4));
-        
-        // For [1][3], the DP algorithm uses: table[i][j] = table[i][j-1] * table[i][1]
-        // table[1][3] = table[1][2] * table[1][1] = 4 * 2 = 8 mod 7 = 1
         assert_eq!(table_data[1][3], Integer::from(1));
-        
-        // Third row (i=2) if it exists
-        if table_data.len() > 2 {
-            assert_eq!(table_data[2][0], Integer::from(1)); // Base case: j=0 => 1
-            
-            // For [2][1], the DP algorithm uses: table[i][1] = (table[i-1][1])^(2^b)
-            // table[2][1] = (table[1][1])^(2^2) = 2^4 = 16 mod 7 = 2
-            assert_eq!(table_data[2][1], Integer::from(2));
-            
-            // For [2][2] = table[2][1] * table[2][1] = 2 * 2 = 4
-            assert_eq!(table_data[2][2], Integer::from(4));
-            
-            // For [2][3] = table[2][2] * table[2][1] = 4 * 2 = 8 mod 7 = 1 
-            assert_eq!(table_data[2][3], Integer::from(1));
-        }
+
+        assert_eq!(table_data[2][0], Integer::from(1));
+        assert_eq!(table_data[2][1], Integer::from(4));
+        assert_eq!(table_data[2][2], Integer::from(2));
+        assert_eq!(table_data[2][3], Integer::from(1));
     }
 
     #[test]
@@ -355,21 +347,15 @@ mod tests {
         let modulo = Integer::from(11);
 
         let table = PrecomputeTable::new(g.clone(), block_size, pow_size, modulo.clone());
-        
-        // Size should be > 0
+
         let size = table.size_in_bytes();
         assert!(size > 0);
-        
-        // Check that the formula is consistent
+
         let expected_rows = pow_size / block_size + 1;
         let expected_cols = 1 << block_size;
         let expected_elements = expected_rows * expected_cols;
         let expected_size = expected_elements * mem::size_of::<Integer>();
-        
-        // Note: This is not exactly equal because the size_in_bytes method counts
-        // actual allocated memory while our calculation is an estimate
-        // But the size returned should be at least as large as our estimate
+
         assert!(size >= expected_size);
     }
 }
-

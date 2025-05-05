@@ -1,5 +1,5 @@
 #![doc = include_str!("../README.md")]
-#![forbid(missing_docs)]    
+#![forbid(missing_docs)]
 
 /// Module for decryption key functionality
 pub mod decryption_key;

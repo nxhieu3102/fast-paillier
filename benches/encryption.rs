@@ -1,10 +1,10 @@
-use fast_paillier::{EncryptionKey};
-use rug::Integer;
 use bencher::{benchmark_group, benchmark_main, Bencher};
+use fast_paillier::EncryptionKey;
+use rug::Integer;
 
-fn encryption(b: &mut Bencher) {;
+fn encryption(b: &mut Bencher) {
     let ek = EncryptionKey::sample_112();
-    
+
     b.iter(|| {
         let m = Integer::from(10);
         let mut rng = rand_dev::DevRng::new();

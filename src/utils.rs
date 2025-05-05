@@ -7,7 +7,6 @@ use rug::{Assign, Complete, Integer};
 
 mod small_primes;
 
-
 /// Wraps any randomness source that implements [`rand_core::RngCore`] and makes
 /// it compatible with [`rug::rand`].
 pub fn external_rand(rng: &mut impl RngCore) -> rug::rand::ThreadRandState {
