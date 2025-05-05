@@ -1,14 +1,14 @@
 use std::mem;
 use rug::{Complete, Integer};
 
+/// A table for precomputed values to speed up Paillier encryption operations.
+/// This table stores modular exponentiations for faster computation of cryptographic operations.
 pub struct PrecomputeTable {
     pow_size: usize,
     block_size: usize,
     modulo: Integer,
     table: Vec<Vec<Integer>>,
 }
-
-
 
 impl PrecomputeTable {
     fn calculate_table(
@@ -90,6 +90,13 @@ impl PrecomputeTable {
         table
     }
 
+    /// Creates a new precomputed table using the standard calculation method.
+    ///
+    /// # Arguments
+    /// * `g` - The base integer for exponentiation
+    /// * `block_size` - Size of each block in bits
+    /// * `pow_size` - Maximum power size in bits
+    /// * `modulo` - The modulus for all operations
     pub fn new(g: Integer, block_size: usize, pow_size: usize, modulo: Integer) -> Self {
         let table = Self::calculate_table(&g, block_size, pow_size, &modulo);
 
@@ -101,16 +108,24 @@ impl PrecomputeTable {
         }
     }
 
+    /// Creates a new precomputed table using dynamic programming for calculation.
+    ///
+    /// # Arguments
+    /// * `g` - The base integer for exponentiation
+    /// * `block_size` - Size of each block in bits
+    /// * `pow_size` - Maximum power size in bits
+    /// * `modulo` - The modulus for all operations
     pub fn new_dp(g: Integer, block_size: usize, pow_size: usize, modulo: Integer) -> Self {
         let table = Self::calculate_table_dp(&g, block_size, pow_size, &modulo);
 
         PrecomputeTable {
-            table,
-            block_size,
             pow_size,
+            block_size,
             modulo,
+            table,
         }
     }
+    /// Returns the size of the precomputed table in bytes.
     pub fn size_in_bytes(&self) -> usize {
         let mut size = 0;
         for row in &self.table {
@@ -119,18 +134,22 @@ impl PrecomputeTable {
         size
     }
 
+    /// Returns the block size used in this precomputed table.
     pub fn block_size(&self) -> usize {
         self.block_size
     }
 
+    /// Returns the maximum power size in bits used in this precomputed table.
     pub fn pow_size(&self) -> usize {
         self.pow_size
     }
 
+    /// Returns a reference to the inner table of precomputed values.
     pub fn table(&self) -> &Vec<Vec<Integer>> {
         &self.table
     }
 
+    /// Returns a reference to the modulus used for calculations.
     pub fn modulo(&self) -> &Integer {
         &self.modulo
     }
@@ -185,9 +204,13 @@ mod tests {
         let ek = dk.encryption_key();
         let base = ek.h_pow_n();
         // block_size > 10 --> memory error
-        let block_size = 5 as usize;
+        let block_size = 10 as usize;
         let pow_size = ek.a_size() as usize;
         let modulo: &Integer = ek.nn();
+
+        println!("base: {}", base);
+        println!("pow_size: {}", pow_size);
+        println!("modulo: {}", modulo);
 
         // pow <= 2^pow_size - 1
         let precompute = PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());

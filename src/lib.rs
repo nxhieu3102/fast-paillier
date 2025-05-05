@@ -1,9 +1,13 @@
 #![doc = include_str!("../README.md")]
-#![forbid(missing_docs)]
+#![forbid(missing_docs)]    
 
-mod decryption_key;
-mod encryption_key;
-mod precomputed_table;
+/// Module for decryption key functionality
+pub mod decryption_key;
+/// Module for encryption key functionality
+pub mod encryption_key;
+/// Module for precomputed table optimization
+pub mod precomputed_table;
+/// Utility functions for the Paillier cryptosystem
 pub mod utils;
 
 #[cfg(feature = "serde")]
