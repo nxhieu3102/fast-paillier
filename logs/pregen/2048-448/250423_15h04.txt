@@ -1,4 +1,5 @@
 15h04 --> 15h11
+radix = 10
 
 DecryptionKey { 
     ek: EncryptionKey { 

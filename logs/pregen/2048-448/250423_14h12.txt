@@ -1,4 +1,5 @@
 COUNT = 196 (~19k7)
+radix = 10
 
 DecryptionKey { 
     ek: EncryptionKey { 
