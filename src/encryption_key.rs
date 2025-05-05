@@ -156,8 +156,7 @@ impl EncryptionKey {
         let x = if x.cmp0().is_ge() {
             x.clone()
         } else {
-            let sum = x + self.n();
-            Integer::from(sum)
+            (x + self.n()).complete()
         };
 
         // a = (1 + N)^x mod N^2 = (1 + xN) mod N^2
@@ -263,12 +262,12 @@ impl EncryptionKey {
     }
 
     fn pow(precompute_table: &PrecomputeTable, pow: &Integer) -> Integer {
-        let pow_blocks = Self::convert_into_blocks(&precompute_table, &pow);
+        let pow_blocks = Self::convert_into_blocks(precompute_table, &pow);
         let mut result = Integer::from(1);
 
         for (id, pow_block) in pow_blocks.iter().enumerate() {
             result = (result * &precompute_table.table()[id][*pow_block])
-                .modulo(&precompute_table.modulo());
+                .modulo(precompute_table.modulo());
         }
 
         result

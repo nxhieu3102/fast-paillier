@@ -32,13 +32,12 @@ impl PrecomputeTable {
                     .pow_mod(&Integer::from((i * block_size) as u32), modulo)
                     .unwrap();
                 // tmp2 = base^(tmp1) % modulo
-                let tmp2: Integer = base.clone().pow_mod(&tmp1, modulo).unwrap().into();
+                let tmp2: Integer = base.clone().pow_mod(&tmp1, modulo).unwrap();
                 // tmp3 = tmp2^j % modulo
                 let tmp3: Integer = tmp2
                     .clone()
                     .pow_mod(&Integer::from(j as u32), modulo)
-                    .unwrap()
-                    .into();
+                    .unwrap();
                 table[i][j] = tmp3;
             }
         }
