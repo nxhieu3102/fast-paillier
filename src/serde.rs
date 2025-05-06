@@ -1,12 +1,10 @@
 use rug::Integer;
+use serde::de::{self};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde::de::{self, MapAccess, Visitor};
-use serde::ser::SerializeStruct;
-use std::fmt;
 #[cfg(feature = "serde")]
 use serde_json;
 
-use crate::{DecryptionKey, EncryptionKey, Error, Reason, Bug};
+use crate::{DecryptionKey, EncryptionKey, Error, Reason};
 
 // Serializable representation of EncryptionKey
 #[derive(Serialize, Deserialize)]
@@ -38,8 +36,7 @@ fn integer_to_hex(value: &Integer) -> String {
 
 // Convert hex string to Integer
 fn hex_to_integer(hex: &str) -> Result<Integer, Error> {
-    Integer::from_str_radix(hex, 16)
-        .map_err(|_| Error::from(Reason::Ops))
+    Integer::from_str_radix(hex, 16).map_err(|_| Error::from(Reason::Ops))
 }
 
 impl Serialize for EncryptionKey {
@@ -58,7 +55,7 @@ impl Serialize for EncryptionKey {
             half_n: integer_to_hex(self.half_n()),
             neg_half_n: integer_to_hex(self.neg_half_n()),
         };
-        
+
         serializable.serialize(serializer)
     }
 }
@@ -69,17 +66,12 @@ impl<'de> Deserialize<'de> for EncryptionKey {
         D: Deserializer<'de>,
     {
         let serializable = SerializableEncryptionKey::deserialize(deserializer)?;
-        
+
         let h = hex_to_integer(&serializable.h).map_err(de::Error::custom)?;
         let n = hex_to_integer(&serializable.n).map_err(de::Error::custom)?;
-        
-        EncryptionKey::new(
-            serializable.n_size,
-            serializable.a_size,
-            h,
-            n,
-        )
-        .map_err(de::Error::custom)
+
+        EncryptionKey::new(serializable.n_size, serializable.a_size, h, n)
+            .map_err(de::Error::custom)
     }
 }
 
@@ -104,7 +96,7 @@ impl Serialize for DecryptionKey {
             q: integer_to_hex(self.q()),
             alpha: integer_to_hex(self.alpha()),
         };
-        
+
         serializable.serialize(serializer)
     }
 }
@@ -115,22 +107,17 @@ impl<'de> Deserialize<'de> for DecryptionKey {
         D: Deserializer<'de>,
     {
         let serializable = SerializableDecryptionKey::deserialize(deserializer)?;
-        
+
         let h = hex_to_integer(&serializable.ek.h).map_err(de::Error::custom)?;
         let n = hex_to_integer(&serializable.ek.n).map_err(de::Error::custom)?;
-        
-        let ek = EncryptionKey::new(
-            serializable.ek.n_size,
-            serializable.ek.a_size,
-            h,
-            n,
-        )
-        .map_err(de::Error::custom)?;
-        
+
+        let ek = EncryptionKey::new(serializable.ek.n_size, serializable.ek.a_size, h, n)
+            .map_err(de::Error::custom)?;
+
         let p = hex_to_integer(&serializable.p).map_err(de::Error::custom)?;
         let q = hex_to_integer(&serializable.q).map_err(de::Error::custom)?;
         let alpha = hex_to_integer(&serializable.alpha).map_err(de::Error::custom)?;
-        
+
         DecryptionKey::new(ek, p, q, alpha).map_err(de::Error::custom)
     }
 }
@@ -140,14 +127,12 @@ impl<'de> Deserialize<'de> for DecryptionKey {
 impl EncryptionKey {
     /// Serialize the EncryptionKey to a JSON string
     pub fn to_json(&self) -> Result<String, Error> {
-        serde_json::to_string(self)
-            .map_err(|_| Error::from(Reason::Ops))
+        serde_json::to_string(self).map_err(|_| Error::from(Reason::Ops))
     }
 
     /// Deserialize an EncryptionKey from a JSON string
     pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json)
-            .map_err(|_| Error::from(Reason::Ops))
+        serde_json::from_str(json).map_err(|_| Error::from(Reason::Ops))
     }
 }
 
@@ -155,14 +140,12 @@ impl EncryptionKey {
 impl DecryptionKey {
     /// Serialize the DecryptionKey to a JSON string
     pub fn to_json(&self) -> Result<String, Error> {
-        serde_json::to_string(self)
-            .map_err(|_| Error::from(Reason::Ops))
+        serde_json::to_string(self).map_err(|_| Error::from(Reason::Ops))
     }
 
     /// Deserialize a DecryptionKey from a JSON string
     pub fn from_json(json: &str) -> Result<Self, Error> {
-        serde_json::from_str(json)
-            .map_err(|_| Error::from(Reason::Ops))
+        serde_json::from_str(json).map_err(|_| Error::from(Reason::Ops))
     }
 }
 
@@ -175,13 +158,13 @@ mod tests {
     fn test_encryption_key_serialization() {
         // Sample a known key
         let ek = EncryptionKey::sample_112();
-        
+
         // Serialize to JSON string for testing
         let json = ek.to_json().unwrap();
-        println!("json: {}", json);
+
         // Deserialize back
         let deserialized_ek = EncryptionKey::from_json(&json).unwrap();
-        
+
         // Check key properties are preserved
         assert_eq!(ek.n_size(), deserialized_ek.n_size());
         assert_eq!(ek.a_size(), deserialized_ek.a_size());
@@ -193,13 +176,13 @@ mod tests {
     fn test_decryption_key_serialization() {
         // Sample a known key
         let dk = DecryptionKey::sample_112();
-        
+
         // Serialize to JSON string for testing
         let json = dk.to_json().unwrap();
-        
+
         // Deserialize back
         let deserialized_dk = DecryptionKey::from_json(&json).unwrap();
-        
+
         // Check key properties are preserved
         assert_eq!(dk.p().to_string(), deserialized_dk.p().to_string());
         assert_eq!(dk.q().to_string(), deserialized_dk.q().to_string());
