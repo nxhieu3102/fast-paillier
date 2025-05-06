@@ -3,17 +3,16 @@ use fast_paillier::DecryptionKey;
 use std::time::Duration;
 
 fn keygen(c: &mut Criterion) {
-    let n_size = 2048;
-    let a_size = 448;
+    let n_size = 3072;
+    let a_size = 512;
     let mut rng = rand_dev::DevRng::new();
 
     let mut group = c.benchmark_group("keygen");
     group
         .sample_size(100)
         .measurement_time(Duration::from_secs(3077));
-    // .warm_up_time(Duration::from_secs(3));
 
-    group.bench_function(BenchmarkId::new("keygen", "2048bit"), |b| {
+    group.bench_function(BenchmarkId::new("keygen", "3072bit"), |b| {
         b.iter(|| {
             let _ = DecryptionKey::generate(&mut rng, n_size, a_size).unwrap();
         });
