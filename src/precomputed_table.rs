@@ -338,14 +338,16 @@ mod tests {
         assert_eq!(table_data[2][3], Integer::from(1));
     }
 
+    use crate::EncryptionKey;
+
     #[test]
     fn test_size_in_bytes() {
-        let g = Integer::from(7);
-        let block_size = 4;
-        let pow_size = 16;
-        let modulo = Integer::from(11);
-
-        let table = PrecomputeTable::new(g.clone(), block_size, pow_size, modulo.clone());
+        let block_size = 18;
+        let pow_size = 512;
+        let ek = EncryptionKey::sample_128();
+        let modulo = ek.nn();
+        let base = ek.h_pow_n();
+        let table = PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
 
         let size = table.size_in_bytes();
         assert!(size > 0);
@@ -354,7 +356,8 @@ mod tests {
         let expected_cols = 1 << block_size;
         let expected_elements = expected_rows * expected_cols;
         let expected_size = expected_elements * mem::size_of::<Integer>();
-
+        println!("expected_size: {}", expected_size);
+        println!("size: {}", size);
         assert!(size >= expected_size);
     }
 }

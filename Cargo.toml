@@ -32,10 +32,11 @@ serde = ["dep:serde", "rug/serde"]
 name = "comparison"
 harness = false
 
+
 [[bench]]
-name = "encryption_precompute"
+name = "keygen"
 harness = false
 
 [[bench]]
-name = "encryption"
+name = "precompute_table"
 harness = false

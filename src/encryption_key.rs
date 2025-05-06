@@ -162,7 +162,7 @@ impl EncryptionKey {
         // a = (1 + N)^x mod N^2 = (1 + xN) mod N^2
         let a = (Integer::ONE + (&x * self.n()).complete()) % self.nn();
         // b = (h^nonce mod N)^N mod N^2 = (h^n mod N^2)^nonce mod N^2 = h_pow_n^nonce mod N^2
-        let b = self
+        let b: Integer = self
             .h_pow_n()
             .clone()
             .pow_mod(nonce, self.nn())
