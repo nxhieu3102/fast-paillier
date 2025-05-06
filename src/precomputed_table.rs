@@ -117,14 +117,19 @@ impl PrecomputeTable {
     }
 
     #[cfg(feature = "redis-cache")]
-    fn generate_cache_key(g: &Integer, block_size: usize, pow_size: usize, modulo: &Integer) -> String {
+    fn generate_cache_key(
+        g: &Integer,
+        block_size: usize,
+        pow_size: usize,
+        modulo: &Integer,
+    ) -> String {
         // Generate a unique key based on parameters
         let mut hasher = Sha256::new();
         hasher.update(g.to_string().as_bytes());
         hasher.update(block_size.to_string().as_bytes());
         hasher.update(pow_size.to_string().as_bytes());
         hasher.update(modulo.to_string().as_bytes());
-        
+
         let result = hasher.finalize();
         format!("precompute_table:{}", encode(result))
     }
@@ -181,17 +186,23 @@ impl PrecomputeTable {
     /// * `modulo` - The modulus for all operations
     /// * `redis_host` - Optional Redis host URL (e.g., "redis://127.0.0.1/")
     #[cfg(feature = "redis-cache")]
-    pub fn new(g: Integer, block_size: usize, pow_size: usize, modulo: Integer, redis_host: Option<&str>) -> Self {
+    pub fn new(
+        g: Integer,
+        block_size: usize,
+        pow_size: usize,
+        modulo: Integer,
+        redis_host: Option<&str>,
+    ) -> Self {
         // Try to connect to Redis if host is provided
         let mut conn = Self::connect_to_redis(redis_host).unwrap_or(None);
-        
+
         // If connected to Redis, try to get the table from cache
         if let Some(ref mut conn) = conn {
             let cache_key = Self::generate_cache_key(&g, block_size, pow_size, &modulo);
             if let Ok(Some(table)) = Self::get_from_cache(conn, &cache_key) {
                 return table;
             }
-            
+
             // If not found in cache, calculate and store
             let table = PrecomputeTable {
                 pow_size,
@@ -206,10 +217,10 @@ impl PrecomputeTable {
             let _ = Self::store_in_cache(conn, &cache_key, &table);
             return table;
         }
-        
+
         // Fall back to calculating the table if Redis is not available
         let table = Self::calculate_table(&g, block_size, pow_size, &modulo);
-        
+
         PrecomputeTable {
             pow_size,
             block_size,
@@ -227,17 +238,23 @@ impl PrecomputeTable {
     /// * `modulo` - The modulus for all operations
     /// * `redis_host` - Optional Redis host URL (e.g., "redis://127.0.0.1/")
     #[cfg(feature = "redis-cache")]
-    pub fn new_dp(g: Integer, block_size: usize, pow_size: usize, modulo: Integer, redis_host: Option<&str>) -> Self {
+    pub fn new_dp(
+        g: Integer,
+        block_size: usize,
+        pow_size: usize,
+        modulo: Integer,
+        redis_host: Option<&str>,
+    ) -> Self {
         // Try to connect to Redis if host is provided
         let mut conn = Self::connect_to_redis(redis_host).unwrap_or(None);
-        
+
         // If connected to Redis, try to get the table from cache
         if let Some(ref mut conn) = conn {
             let cache_key = Self::generate_cache_key(&g, block_size, pow_size, &modulo);
             if let Ok(Some(table)) = Self::get_from_cache(conn, &cache_key) {
                 return table;
             }
-            
+
             // If not found in cache, calculate and store
             let table = PrecomputeTable {
                 pow_size,
@@ -245,7 +262,6 @@ impl PrecomputeTable {
                 modulo: modulo.clone(),
                 table: Self::calculate_table_dp(&g, block_size, pow_size, &modulo),
             };
-            
 
             println!("Table size: {}", table.size_in_bytes());
             println!("block_size: {:?}", block_size);
@@ -254,10 +270,10 @@ impl PrecomputeTable {
             let _ = Self::store_in_cache(conn, &cache_key, &table);
             return table;
         }
-        
+
         // Fall back to calculating the table if Redis is not available
         let table = Self::calculate_table_dp(&g, block_size, pow_size, &modulo);
-        
+
         PrecomputeTable {
             pow_size,
             block_size,
@@ -358,10 +374,11 @@ mod tests {
 
         // pow <= 2^pow_size - 1
         #[cfg(feature = "redis-cache")]
-        let precompute = PrecomputeTable::new(base.clone(), block_size, pow_size, modulo.clone(), None);
+        let precompute =
+            PrecomputeTable::new(base.clone(), block_size, pow_size, modulo.clone(), None);
         #[cfg(not(feature = "redis-cache"))]
         let precompute = PrecomputeTable::new(base.clone(), block_size, pow_size, modulo.clone());
-        
+
         let m = Integer::from(10);
         let mut rng = rand_dev::DevRng::new();
         let c = ek
@@ -379,12 +396,13 @@ mod tests {
         let block_size = 5 as usize;
         let pow_size = ek.a_size() as usize;
         let modulo: &Integer = ek.nn();
-        
+
         #[cfg(feature = "redis-cache")]
-        let precompute = PrecomputeTable::new(base.clone(), block_size, pow_size, modulo.clone(), None);
+        let precompute =
+            PrecomputeTable::new(base.clone(), block_size, pow_size, modulo.clone(), None);
         #[cfg(not(feature = "redis-cache"))]
         let precompute = PrecomputeTable::new(base.clone(), block_size, pow_size, modulo.clone());
-        
+
         let m = Integer::from(10);
         let mut rng = rand_dev::DevRng::new();
         let c = ek
@@ -402,12 +420,14 @@ mod tests {
         let block_size = 10 as usize;
         let pow_size = ek.a_size() as usize;
         let modulo: &Integer = ek.nn();
-        
+
         #[cfg(feature = "redis-cache")]
-        let precompute = PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone(), None);
+        let precompute =
+            PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone(), None);
         #[cfg(not(feature = "redis-cache"))]
-        let precompute = PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
-        
+        let precompute =
+            PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
+
         let m = Integer::from(10);
         let mut rng = rand_dev::DevRng::new();
         let c = ek
@@ -425,12 +445,14 @@ mod tests {
         let block_size = 10 as usize;
         let pow_size = ek.a_size() as usize;
         let modulo: &Integer = ek.nn();
-        
+
         #[cfg(feature = "redis-cache")]
-        let precompute = PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone(), None);
+        let precompute =
+            PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone(), None);
         #[cfg(not(feature = "redis-cache"))]
-        let precompute = PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
-        
+        let precompute =
+            PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
+
         let m = Integer::from(10);
         let mut rng = rand_dev::DevRng::new();
         let c = ek
@@ -501,7 +523,7 @@ mod tests {
         let table = PrecomputeTable::new(g.clone(), block_size, pow_size, modulo.clone(), None);
         #[cfg(not(feature = "redis-cache"))]
         let table = PrecomputeTable::new(g.clone(), block_size, pow_size, modulo.clone());
-        
+
         let table_data = table.table();
 
         assert_eq!(table_data[0][0], Integer::from(1));
@@ -531,7 +553,7 @@ mod tests {
         let table = PrecomputeTable::new_dp(g.clone(), block_size, pow_size, modulo.clone(), None);
         #[cfg(not(feature = "redis-cache"))]
         let table = PrecomputeTable::new_dp(g.clone(), block_size, pow_size, modulo.clone());
-        
+
         let table_data = table.table();
 
         assert_eq!(table_data[0][0], Integer::from(1));
@@ -558,13 +580,13 @@ mod tests {
         let pow_size = 16;
         let modulo = Integer::from(11);
         let table = PrecomputeTable::new(g.clone(), block_size, pow_size, modulo.clone());
-        
+
         let serialized_size = serialize(&table).unwrap().len();
         let estimated_size = table.size_in_bytes();
-        
+
         println!("Serialized size: {}", serialized_size);
         println!("Estimated size (size_in_bytes): {}", estimated_size);
-        
+
         assert!(serialized_size > 0);
         let expected_rows = pow_size / block_size + 1;
         let expected_cols = 1 << block_size;
