@@ -32,7 +32,7 @@ pub enum RedisIntegrationError {
     /// Error that occurs when there's a problem connecting to Redis
     #[error("Failed to connect to Redis: {0}")]
     ConnectionError(#[from] RedisError),
-    
+
     /// Error that occurs during serialization or deserialization of data
     #[error("Failed to serialize/deserialize data: {0}")]
     SerializationError(#[from] bincode::Error),
