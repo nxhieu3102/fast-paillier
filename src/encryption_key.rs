@@ -1,8 +1,8 @@
-use rand_core::{CryptoRng, RngCore};
-use rug::{Complete, Integer};
-
+use crate::precomputed_table::PrecomputeTable;
 use crate::{utils, Ciphertext, Nonce, Plaintext};
 use crate::{Bug, Error, Reason};
+use rand_core::{CryptoRng, RngCore};
+use rug::{Complete, Integer};
 
 /// Paillier encryption key
 #[derive(Clone, Debug)]
@@ -239,5 +239,60 @@ impl EncryptionKey {
     /// ```
     pub fn oneg(&self, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
         Ok(ciphertext.invert_ref(self.nn()).ok_or(Reason::Ops)?.into())
+    }
+}
+
+impl EncryptionKey {
+    /// Encrypts the plaintext using a precomputed table for faster exponentiation
+    pub fn encrypt_with_precompute_table(
+        &self,
+        rng: &mut (impl RngCore + CryptoRng),
+        precompute_table: &PrecomputeTable,
+        m: &Plaintext,
+    ) -> Result<Ciphertext, Error> {
+        let r = utils::sample_with_size(rng, self.nounce_size());
+        // h_pow_rn = (h^n)^r = h^(n*r) mod n^2
+        let h_pow_rn = Self::pow(precompute_table, &r);
+
+        // g_pow_m = g^m = (1 + n) ^ m = (1 + n * m) mod n^2
+        let g_pow_m = ((m * &self.n).complete() + 1) % &self.nn;
+
+        let c = (g_pow_m * h_pow_rn) % &self.nn;
+        Ok(c)
+    }
+
+    fn pow(precompute_table: &PrecomputeTable, pow: &Integer) -> Integer {
+        let pow_blocks = Self::convert_into_blocks(precompute_table, &pow);
+        let mut result = Integer::from(1);
+
+        for (id, pow_block) in pow_blocks.iter().enumerate() {
+            result = (result * &precompute_table.table()[id][*pow_block])
+                .modulo(precompute_table.modulo());
+        }
+
+        result
+    }
+
+    fn convert_into_blocks(precompute_table: &PrecomputeTable, x: &Integer) -> Vec<usize> {
+        // convert bigint --> list of bits
+        // block_size bits --> group (right to left)
+        // each group --> usize/u64/...
+        let block_size = precompute_table.block_size();
+        let pow_size = precompute_table.pow_size();
+        let num_block = pow_size / block_size + if (pow_size % block_size) > 0 { 1 } else { 0 };
+
+        let mut result = vec![0; num_block];
+
+        for bit_id in 0..pow_size {
+            if x.get_bit(bit_id as u32) {
+                // bit_id in is the (bit_id % block_size) bit of group (bit_id / block_size)
+                // turn on the (bit_id % block_size) bit of group (bit_id / block_size)
+                let block_id = bit_id / block_size;
+                let bit_id = bit_id % block_size;
+                result[block_id] |= 1 << bit_id;
+            }
+        }
+
+        result
     }
 }

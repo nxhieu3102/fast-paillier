@@ -1,8 +1,13 @@
 #![doc = include_str!("../README.md")]
 #![forbid(missing_docs)]
 
-mod decryption_key;
-mod encryption_key;
+/// Module for decryption key functionality
+pub mod decryption_key;
+/// Module for encryption key functionality
+pub mod encryption_key;
+/// Module for precomputed table optimization
+pub mod precomputed_table;
+/// Utility functions for the Paillier cryptosystem
 pub mod utils;
 
 #[cfg(feature = "serde")]
@@ -303,9 +308,8 @@ mod tests {
         let dk = DecryptionKey::sample_128();
         let ek = dk.encryption_key();
 
-        let plaintext = Integer::from(123);
+        let plaintext = Integer::from(10);
         let (ciphertext, nonce) = ek.encrypt_with_random(&mut rng, &plaintext).unwrap();
-
         match dk.decrypt(&ciphertext) {
             Ok(decrypted) => {
                 assert_eq!(decrypted, plaintext);
