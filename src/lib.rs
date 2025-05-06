@@ -6,6 +6,16 @@ pub mod decryption_key;
 /// Module for encryption key functionality
 pub mod encryption_key;
 /// Module for precomputed table optimization
+///
+/// This module provides the [`PrecomputeTable`] struct for optimizing Paillier encryption operations.
+///
+/// # Redis Integration
+///
+/// When the `redis-cache` feature is enabled, `PrecomputeTable` gains the ability to store and
+/// retrieve precomputed tables from a Redis server, avoiding redundant calculations for tables
+/// with the same parameters.
+///
+/// See the example in `examples/redis_cache_example.rs` for usage.
 pub mod precomputed_table;
 /// Utility functions for the Paillier cryptosystem
 pub mod utils;

@@ -1,0 +1,22 @@
+# Git
+.git
+.gitignore
+
+# Rust build artifacts
+/target
+**/*.rs.bk
+Cargo.lock
+
+# Editor files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Other unnecessary files
+README.md
+LICENSE*
+benches/
+examples/
+tests/
+src/ 
