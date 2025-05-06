@@ -30,7 +30,6 @@ libpaillier = { version = "0.5", default-features = false, features = ["gmp"] }
 once_cell = "1.21.3"
 
 [features]
-default = ["serde"]                # for easily test serde.rs
 serde = ["dep:serde", "rug/serde", "dep:serde_json"]
 
 [[bench]]
