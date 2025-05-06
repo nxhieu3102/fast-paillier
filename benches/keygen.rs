@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use fast_paillier::DecryptionKey;
 use std::time::Duration;
 
@@ -11,7 +11,7 @@ fn keygen(c: &mut Criterion) {
     group
         .sample_size(100)
         .measurement_time(Duration::from_secs(3077));
-        // .warm_up_time(Duration::from_secs(3));
+    // .warm_up_time(Duration::from_secs(3));
 
     group.bench_function(BenchmarkId::new("keygen", "2048bit"), |b| {
         b.iter(|| {

@@ -1,11 +1,11 @@
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
-use fast_paillier::{precomputed_table::PrecomputeTable, EncryptionKey, AnyEncryptionKey};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use fast_paillier::{precomputed_table::PrecomputeTable, AnyEncryptionKey, EncryptionKey};
 use std::time::Duration;
 
 fn calculate_precompute_table(c: &mut Criterion) {
     let ek = EncryptionKey::sample_128();
     let block_size = 18;
-    let pow_size = 512; 
+    let pow_size = 512;
 
     let mut group = c.benchmark_group("precompute_table");
 
@@ -27,8 +27,5 @@ fn calculate_precompute_table(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    calculate_precompute_table
-);
+criterion_group!(benches, calculate_precompute_table);
 criterion_main!(benches);

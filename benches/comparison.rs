@@ -42,12 +42,15 @@ fn encryption(c: &mut criterion::Criterion) {
             - ek.half_n();
         x
     };
-    
+
     group.bench_function("Encrypt with precompute table", |b| {
         let mut bench_rng = rand_dev::DevRng::new();
         b.iter_batched(
             &mut precompute_inputs,
-            |x| ek.encrypt_with_precompute_table(&mut bench_rng, &table, &x).unwrap(),
+            |x| {
+                ek.encrypt_with_precompute_table(&mut bench_rng, &table, &x)
+                    .unwrap()
+            },
             criterion::BatchSize::SmallInput,
         )
     });
