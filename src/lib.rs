@@ -9,6 +9,8 @@ pub mod encryption_key;
 pub mod precomputed_table;
 /// Utility functions for the Paillier cryptosystem
 pub mod utils;
+/// Common types and functions
+pub mod common;
 
 #[cfg(feature = "serde")]
 mod serde;
@@ -16,14 +18,14 @@ mod serde;
 use std::fmt;
 
 use rand_core::{CryptoRng, RngCore};
-use rug::Integer;
+use num_bigint::BigInt;
 
 /// Paillier ciphertext
-pub type Ciphertext = Integer;
+pub type Ciphertext = BigInt;
 /// Paillier plaintext
-pub type Plaintext = Integer;
+pub type Plaintext = BigInt;
 /// Paillier nonce
-pub type Nonce = Integer;
+pub type Nonce = BigInt;
 
 pub use self::{decryption_key::DecryptionKey, encryption_key::EncryptionKey};
 
@@ -84,6 +86,7 @@ mod sealed {
 ///     Ok(ciphertext)
 /// }
 /// ```
+
 pub trait AnyEncryptionKey: sealed::Sealed {
     /// Returns the size of `N` in bits
     fn n_size(&self) -> u32;
@@ -92,17 +95,17 @@ pub trait AnyEncryptionKey: sealed::Sealed {
     /// Returns the size of nonce in bits
     fn nounce_size(&self) -> u32;
     /// Returns `N`
-    fn n(&self) -> &Integer;
+    fn n(&self) -> &BigInt;
     /// Returns `N^2`
-    fn nn(&self) -> &Integer;
+    fn nn(&self) -> &BigInt;
     /// Returns `N/2`
-    fn half_n(&self) -> &Integer;
+    fn half_n(&self) -> &BigInt;
     /// Return -`N/2`
-    fn neg_half_n(&self) -> &Integer;
+    fn neg_half_n(&self) -> &BigInt;
     /// Returns h
-    fn h(&self) -> &Integer;
+    fn h(&self) -> &BigInt;
     /// Return h^n
-    fn h_pow_n(&self) -> &Integer;
+    fn h_pow_n(&self) -> &BigInt;
 
     /// Encrypts the plaintext `x` in `{-N/2, .., N_2}` with `nonce` in `Z*_n`
     ///
@@ -126,7 +129,7 @@ pub trait AnyEncryptionKey: sealed::Sealed {
     /// ```text
     /// omul(a, Enc(c)) = Enc(a * c)
     /// ```
-    fn omul(&self, scalar: &Integer, ciphertext: &Ciphertext) -> Result<Ciphertext, Error>;
+    fn omul(&self, scalar: &BigInt, ciphertext: &Ciphertext) -> Result<Ciphertext, Error>;
     /// Homomorphic negation of a ciphertext
     ///
     /// ```text
@@ -135,7 +138,7 @@ pub trait AnyEncryptionKey: sealed::Sealed {
     fn oneg(&self, ciphertext: &Ciphertext) -> Result<Ciphertext, Error>;
 
     /// Checks whether `x` is `{-N/2, .., N/2}`
-    fn in_signed_group(&self, x: &Integer) -> bool;
+    fn in_signed_group(&self, x: &BigInt) -> bool;
 }
 
 /// Additional functionality implemented for [AnyEncryptionKey]
@@ -177,27 +180,27 @@ impl AnyEncryptionKey for EncryptionKey {
         self.nounce_size()
     }
 
-    fn n(&self) -> &Integer {
+    fn n(&self) -> &BigInt {
         self.n()
     }
 
-    fn nn(&self) -> &Integer {
+    fn nn(&self) -> &BigInt {
         self.nn()
     }
 
-    fn half_n(&self) -> &Integer {
+    fn half_n(&self) -> &BigInt {
         self.half_n()
     }
 
-    fn neg_half_n(&self) -> &Integer {
+    fn neg_half_n(&self) -> &BigInt {
         self.neg_half_n()
     }
 
-    fn h(&self) -> &Integer {
+    fn h(&self) -> &BigInt {
         self.h()
     }
 
-    fn h_pow_n(&self) -> &Integer {
+    fn h_pow_n(&self) -> &BigInt {
         self.h_pow_n()
     }
 
@@ -213,7 +216,7 @@ impl AnyEncryptionKey for EncryptionKey {
         self.osub(c1, c2)
     }
 
-    fn omul(&self, scalar: &Integer, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
+    fn omul(&self, scalar: &BigInt, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
         self.omul(scalar, ciphertext)
     }
 
@@ -221,7 +224,7 @@ impl AnyEncryptionKey for EncryptionKey {
         self.oneg(ciphertext)
     }
 
-    fn in_signed_group(&self, x: &Integer) -> bool {
+    fn in_signed_group(&self, x: &BigInt) -> bool {
         self.in_signed_group(x)
     }
 }
@@ -239,27 +242,27 @@ impl AnyEncryptionKey for DecryptionKey {
         self.encryption_key().nounce_size()
     }
 
-    fn n(&self) -> &Integer {
+    fn n(&self) -> &BigInt {
         self.encryption_key().n()
     }
 
-    fn nn(&self) -> &Integer {
+    fn nn(&self) -> &BigInt {
         self.encryption_key().nn()
     }
 
-    fn half_n(&self) -> &Integer {
+    fn half_n(&self) -> &BigInt {
         self.encryption_key().half_n()
     }
 
-    fn neg_half_n(&self) -> &Integer {
+    fn neg_half_n(&self) -> &BigInt {
         self.encryption_key().neg_half_n()
     }
 
-    fn h(&self) -> &Integer {
+    fn h(&self) -> &BigInt {
         self.encryption_key().h()
     }
 
-    fn h_pow_n(&self) -> &Integer {
+    fn h_pow_n(&self) -> &BigInt {
         self.encryption_key().h_pow_n()
     }
 
@@ -275,7 +278,7 @@ impl AnyEncryptionKey for DecryptionKey {
         self.encryption_key().osub(c1, c2)
     }
 
-    fn omul(&self, scalar: &Integer, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
+    fn omul(&self, scalar: &BigInt, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
         self.omul(scalar, ciphertext)
     }
 
@@ -283,7 +286,7 @@ impl AnyEncryptionKey for DecryptionKey {
         self.encryption_key().oneg(ciphertext)
     }
 
-    fn in_signed_group(&self, x: &Integer) -> bool {
+    fn in_signed_group(&self, x: &BigInt) -> bool {
         self.encryption_key().in_signed_group(x)
     }
 }
@@ -299,8 +302,7 @@ impl fmt::Debug for dyn AnyEncryptionKey + '_ {
 #[cfg(test)]
 mod tests {
     use crate::{decryption_key::DecryptionKey, utils};
-    use rug::Integer;
-
+    use num_bigint::BigInt;
     #[test]
     fn test_enc_dec() {
         let mut rng = rand::thread_rng();
@@ -308,14 +310,14 @@ mod tests {
         let dk = DecryptionKey::sample_128();
         let ek = dk.encryption_key();
 
-        let plaintext = Integer::from(10);
+        let plaintext = BigInt::from(10);
         let (ciphertext, nonce) = ek.encrypt_with_random(&mut rng, &plaintext).unwrap();
         match dk.decrypt(&ciphertext) {
             Ok(decrypted) => {
                 assert_eq!(decrypted, plaintext);
                 assert!(ek.in_signed_group(&decrypted));
                 assert!(utils::in_mult_group(&decrypted, ek.nn()));
-                assert_eq!(ek.nounce_size(), nonce.significant_bits());
+                assert_eq!(ek.nounce_size() as u64, nonce.bits());
             }
             Err(_) => {
                 panic!("Decryption failed");

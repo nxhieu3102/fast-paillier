@@ -1,4 +1,3 @@
-use rug::Integer;
 use serde::de::{self};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(feature = "serde")]
@@ -151,7 +150,6 @@ impl DecryptionKey {
 
 #[cfg(test)]
 mod tests {
-    use rug::Complete;
 
     use super::*;
     use crate::{AnyEncryptionKey, DecryptionKey};

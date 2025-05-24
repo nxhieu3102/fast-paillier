@@ -1,9 +1,10 @@
 use rand_core::{CryptoRng, RngCore};
-use rug::Integer;
-
 use crate::{utils, AnyEncryptionKey, Bug, Ciphertext, EncryptionKey, Nonce, Plaintext};
 use crate::{Error, Reason};
-
+use num_bigint::BigInt;
+use num_integer::Integer;
+use crate::common::BigIntExt;
+use num_traits::Num;
 /// Paillier decryption key
 #[derive(Clone, Debug)]
 pub struct DecryptionKey {
@@ -11,12 +12,12 @@ pub struct DecryptionKey {
     ek: EncryptionKey,
 
     /// prime (n = p * q)
-    p: Integer,
+    p: BigInt,
     /// prime (n = p * q)
-    q: Integer,
+    q: BigInt,
 
     /// (p-1)(q-1)/4 mod alpha = 0
-    alpha: Integer,
+    alpha: BigInt,
 }
 
 impl DecryptionKey {
@@ -26,27 +27,27 @@ impl DecryptionKey {
     }
 
     /// The Paillier modulus
-    pub fn n(&self) -> &Integer {
+    pub fn n(&self) -> &BigInt {
         self.ek.n()
     }
 
     /// Prime `p`
-    pub fn p(&self) -> &Integer {
+    pub fn p(&self) -> &BigInt {
         &self.p
     }
     /// Prime `q`
-    pub fn q(&self) -> &Integer {
+    pub fn q(&self) -> &BigInt {
         &self.q
     }
 
     /// alpha | (p - 1)(q - 1)/4
-    pub fn alpha(&self) -> &Integer {
+    pub fn alpha(&self) -> &BigInt {
         &self.alpha
     }
 
     /// Bits length of smaller prime (`p` or `q`)
     pub fn bits_length(&self) -> u32 {
-        self.p.significant_bits().min(self.q.significant_bits())
+        self.p.bits().min(self.q.bits()) as u32
     }
 }
 
@@ -92,14 +93,14 @@ impl DecryptionKey {
 
             let div_p = utils::generate_safe_prime(rng, a_size / 2);
             let div_q = utils::generate_safe_prime(rng, a_size / 2);
-            assert_eq!(div_p.significant_bits(), a_size / 2);
-            assert_eq!(div_q.significant_bits(), a_size / 2);
+            assert_eq!(div_p.bits(), a_size as u64 / 2);
+            assert_eq!(div_q.bits(), a_size as u64 / 2);
             assert!(utils::is_prime(&div_p));
             assert!(utils::is_prime(&div_q));
 
             // TODO: do we need to check if alpha size is exactly a_size?
             // let temp_alpha = div_p.clone() * &div_q;
-            // if temp_alpha.significant_bits() != a_size {
+            // if temp_alpha.bits() != a_size {
             //     // can not construct alpha of the right size
             //     println!("div_p * div_q size is not equal to a_size");
             //     continue 'outer;
@@ -119,21 +120,21 @@ impl DecryptionKey {
                 let other_div_q = utils::sample_odd_with_size(rng, other_bit_length);
                 assert!(other_div_p.is_odd());
                 assert!(other_div_q.is_odd());
-                assert!(other_div_p.significant_bits() == other_bit_length);
-                assert!(other_div_q.significant_bits() == other_bit_length);
+                assert!(other_div_p.bits() == other_bit_length as u64);
+                assert!(other_div_q.bits() == other_bit_length as u64);
 
                 // Step 2: calculate p, q
                 // p = 2 * div_p * other_div_p + 1
                 // q = 2 * div_q * other_div_q + 1
-                let p: Integer = Integer::from(2) * &div_p * &other_div_p + 1;
-                let q: Integer = Integer::from(2) * &div_q * &other_div_q + 1;
+                let p: BigInt = BigInt::from(2) * &div_p * &other_div_p + 1;
+                let q: BigInt = BigInt::from(2) * &div_q * &other_div_q + 1;
 
                 // Step 3: validate
 
                 // TODO: do we need to check if n size is exactly n_size?
                 // // validate p, q can construct n of the right size
                 // let temp_n = p.clone() * &q;
-                // if temp_n.significant_bits() != n_size {
+                // if temp_n.bits() != n_size {
                 //     // can not construct n of the right size
                 //     println!("p * q size is not equal to n_size");
                 //     continue 'outer;
@@ -164,11 +165,11 @@ impl DecryptionKey {
         // where beta = (p - 1)(q - 1)/(4.alpha)
         // y is a random element of Z*_N
 
-        let beta: Integer = (p.clone() - 1) * (q.clone() - 1) / (Integer::from(4) * &alpha);
+        let beta: BigInt = (p.clone() - 1) * (q.clone() - 1) / (BigInt::from(4) * &alpha);
         let y = utils::sample_in_mult_group(rng, &n);
         let h = -y
-            .pow_mod(&(Integer::from(2) * &beta), &n)
-            .map_err(|_| Bug::PowModUndef)?;
+            .modpow_ext(&(BigInt::from(2) * &beta), &n)
+            .ok_or(Bug::PowModUndef)?;
 
         let ek = EncryptionKey::new(n_size, a_size, h, n)?;
 
@@ -176,7 +177,7 @@ impl DecryptionKey {
     }
 
     /// Return a decryption key from the encryption key, p, q, alpha
-    pub fn new(ek: EncryptionKey, p: Integer, q: Integer, alpha: Integer) -> Result<Self, Error> {
+    pub fn new(ek: EncryptionKey, p: BigInt, q: BigInt, alpha: BigInt) -> Result<Self, Error> {
         // TODO: validate ek, p, q, alpha are valid
 
         Ok(Self { ek, p, q, alpha })
@@ -188,9 +189,9 @@ impl DecryptionKey {
     pub fn sample_112() -> Self {
         Self {
             ek: EncryptionKey::sample_112(),
-            p: Integer::from_str_radix("352b408f842f95ff7b042028afbd2a9312066e4e41d105e8ca2e162686c05908199e14805579c1a180aba9b20ec3e6d86e77be0cf0cc92212932606089bce6366a978b45e139d2b4abfa86e4fc198f3710d571988b39a050f0d0d857caabb74347d069c7f30d8a93db788abc1814caf5fd755df47391a8f350f85b1c522c7d5b", 16).unwrap(),
-            q: Integer::from_str_radix("ae553897573c0513948d2430f88e41120d9bfe9dacfcb0213bdb51c2880e388f5966d272cb97dd88666d2a921748ead1f787067f1c758f334a5ecefafb6afdbf3c0ffd2632d49d0448ef314d95c0b92711ebe1bc40b031e300f7cb2a78520e130446f7f4bc014253b47627dee93094c8907c67fe0681bc24ebfd57e5b241d95f", 16).unwrap(),
-            alpha: Integer::from_str_radix("7ffeabae28c7c128fab071c9f379387da9b8d4ce576c6f5af837d676a89109b7461ea3376a52b5a38ffcd40eb55dab3478b5fe94579512e9", 16).unwrap() ,
+            p: BigInt::from_str_radix("352b408f842f95ff7b042028afbd2a9312066e4e41d105e8ca2e162686c05908199e14805579c1a180aba9b20ec3e6d86e77be0cf0cc92212932606089bce6366a978b45e139d2b4abfa86e4fc198f3710d571988b39a050f0d0d857caabb74347d069c7f30d8a93db788abc1814caf5fd755df47391a8f350f85b1c522c7d5b", 16).unwrap(),
+            q: BigInt::from_str_radix("ae553897573c0513948d2430f88e41120d9bfe9dacfcb0213bdb51c2880e388f5966d272cb97dd88666d2a921748ead1f787067f1c758f334a5ecefafb6afdbf3c0ffd2632d49d0448ef314d95c0b92711ebe1bc40b031e300f7cb2a78520e130446f7f4bc014253b47627dee93094c8907c67fe0681bc24ebfd57e5b241d95f", 16).unwrap(),
+            alpha: BigInt::from_str_radix("7ffeabae28c7c128fab071c9f379387da9b8d4ce576c6f5af837d676a89109b7461ea3376a52b5a38ffcd40eb55dab3478b5fe94579512e9", 16).unwrap() ,
         }
     }
 
@@ -200,9 +201,9 @@ impl DecryptionKey {
     pub fn sample_128() -> Self {
         Self {
             ek: EncryptionKey::sample_128(),
-            p: Integer::from_str_radix("839604457153382033720003326654997544118596113373609234678587338149161354994347914267636071525512710050467656632783964681190975719416301416318441172804941007905632800346097169656312745185266337930499545855863665404948257291631593104963187840014286605100283580915042595051907308234079655979670315278879818661888922549182364361303144823692211219484740422088705064262682566575832813433144012908049224984636749169319450779863173356117467976440703403995243646456725591", 10).unwrap(),
-            q: Integer::from_str_radix("743801265514881103483768821893245925378134035335216611973520259829027656422723219709692160610663116273054702837694488638022069484892336461456218827736375462047842812789380167552340656549341374717474433671272564983828365484016261471809658880542451263854116138619518659990303082479785471490469802954931219698744200396168471293146272351181923597139787506343883140313058926610440737746588145351090170254693560055414792516210777763575309516717116560514389624057706987", 10).unwrap(),
-            alpha: Integer::from_str_radix("4741906189692490942881550526551134583945588334769176626212802369003989678803877719143415897043820272564409651596590439168843375671085094013575119097115737", 10).unwrap(),
+            p: BigInt::from_str_radix("839604457153382033720003326654997544118596113373609234678587338149161354994347914267636071525512710050467656632783964681190975719416301416318441172804941007905632800346097169656312745185266337930499545855863665404948257291631593104963187840014286605100283580915042595051907308234079655979670315278879818661888922549182364361303144823692211219484740422088705064262682566575832813433144012908049224984636749169319450779863173356117467976440703403995243646456725591", 10).unwrap(),
+            q: BigInt::from_str_radix("743801265514881103483768821893245925378134035335216611973520259829027656422723219709692160610663116273054702837694488638022069484892336461456218827736375462047842812789380167552340656549341374717474433671272564983828365484016261471809658880542451263854116138619518659990303082479785471490469802954931219698744200396168471293146272351181923597139787506343883140313058926610440737746588145351090170254693560055414792516210777763575309516717116560514389624057706987", 10).unwrap(),
+            alpha: BigInt::from_str_radix("4741906189692490942881550526551134583945588334769176626212802369003989678803877719143415897043820272564409651596590439168843375671085094013575119097115737", 10).unwrap(),
         }
     }
 }
@@ -213,13 +214,13 @@ impl DecryptionKey {
     /// plaintext = L(c^(2*alpha) mod N^2, N) * (2*alpha)^{-1} mod N
     /// where: L(u, N) = (u - 1) / N (mod)
     pub fn decrypt(&self, c: &Ciphertext) -> Result<Plaintext, Error> {
-        let two_alpha = Integer::from(2) * &self.alpha;
+        let two_alpha = BigInt::from(2) * &self.alpha;
 
         // L(c^(2*alpha) mod N^2, N)
         let u = c
             .clone()
-            .pow_mod(&two_alpha, self.nn())
-            .map_err(|_| Error(Reason::Bug(Bug::PowModUndef)))?;
+            .modpow_ext(&two_alpha, self.nn())
+            .ok_or(Bug::PowModUndef)?;
         // TODO: do we need to check u % N^2 == 1?
         // assert_eq!(u.clone() % self.nn(), Integer::from(1);
 
@@ -227,8 +228,8 @@ impl DecryptionKey {
 
         // (2 * alpha)^{-1} mod N
         let two_alpha_inv = two_alpha
-            .invert(self.n())
-            .map_err(|_| Error(Reason::Bug(Bug::InvertUndef)))?;
+            .modinv(self.n())
+            .ok_or(Bug::InvertUndef)?;
 
         // plaintext = L(c^(2*alpha) mod N^2, N) * (2*alpha)^{-1} mod N
         let plaintext = l * &two_alpha_inv % self.n();
@@ -280,7 +281,7 @@ impl DecryptionKey {
     /// ```text
     /// omul(a, Enc(c)) = Enc(a * c)
     /// ```
-    pub fn omul(&self, scalar: &Integer, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
+    pub fn omul(&self, scalar: &BigInt, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
         // TODO: omul using Chinese Remainder Theorem
 
         self.ek.omul(scalar, ciphertext)
@@ -289,23 +290,22 @@ impl DecryptionKey {
 
 #[cfg(test)]
 mod tests {
-    use rug::Integer;
 
     use crate::decryption_key::DecryptionKey;
-
+    use num_bigint::BigInt;
     #[test]
     fn test_sample_decryption_key_112() {
         let dk = DecryptionKey::sample_112();
 
-        assert_eq!(dk.p().clone() % 4, Integer::from(3));
-        assert_eq!(dk.q().clone() % 4, Integer::from(3));
+        assert_eq!(dk.p().clone() % 4, BigInt::from(3));
+        assert_eq!(dk.q().clone() % 4, BigInt::from(3));
     }
 
     #[test]
     fn test_sample_decryption_key_128() {
         let dk = DecryptionKey::sample_128();
 
-        assert_eq!(dk.p().clone() % 4, Integer::from(3));
-        assert_eq!(dk.q().clone() % 4, Integer::from(3));
+        assert_eq!(dk.p().clone() % 4, BigInt::from(3));
+        assert_eq!(dk.q().clone() % 4, BigInt::from(3));
     }
 }
