@@ -2,10 +2,10 @@
 
 use fast_paillier::AnyEncryptionKey;
 use fast_paillier::{utils, DecryptionKey};
-use rand::{CryptoRng, Rng, RngCore};
-use rand;
-use num_bigint::{RandBigInt, BigInt};
+use num_bigint::{BigInt, RandBigInt};
 use num_traits::{One, Zero};
+use rand;
+use rand::{CryptoRng, Rng, RngCore};
 #[test]
 fn encrypt_decrypt() {
     let mut rng = rand::thread_rng();
@@ -20,7 +20,7 @@ fn encrypt_decrypt() {
         // let plaintext = ek
         //     .n()
         //     .clone()
-            //.random_below(&mut utils::external_rand(&mut rng));
+        //.random_below(&mut utils::external_rand(&mut rng));
         // let plaintext = plaintext - (ek.n() / 2u8);
         println!("Plaintext: {plaintext}");
 

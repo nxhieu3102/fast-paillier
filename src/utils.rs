@@ -2,12 +2,12 @@
 
 use std::fmt;
 
-use rand::RngCore;
-use num_bigint::{BigInt, RandBigInt, BigUint, ToBigInt};
-use num_integer::{Integer};
+use num_bigint::{BigInt, BigUint, RandBigInt, ToBigInt};
+use num_integer::Integer;
+use num_prime::nt_funcs;
 use num_traits::identities::One;
 use num_traits::Zero;
-use num_prime::nt_funcs;
+use rand::RngCore;
 mod small_primes;
 
 /// Wraps any randomness source that implements [`rand_core::RngCore`] and makes
@@ -90,7 +90,7 @@ pub fn is_prime(x: &BigInt) -> bool {
         }
 
         let mod_result = x % small_prime;
-        if mod_result.is_zero(){
+        if mod_result.is_zero() {
             return false;
         }
     }
@@ -101,7 +101,9 @@ pub fn is_prime(x: &BigInt) -> bool {
     // }
 
     for _ in 0..25 {
-        if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) = nt_funcs::is_prime(&x.to_biguint().unwrap(), None) {
+        if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) =
+            nt_funcs::is_prime(&x.to_biguint().unwrap(), None)
+        {
             return true;
         }
     }
@@ -158,14 +160,18 @@ pub fn sieve_generate_safe_primes(rng: &mut impl RngCore, bits: u32, amount: usi
         }
 
         // for _ in 0..25 {
-            if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) = nt_funcs::is_prime(&x, None) {
-                x <<= 1;
-                x += 1u8;
-                // for _ in 0..25 {
-                if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) = nt_funcs::is_prime(&x, None) {
-                        return x.to_bigint().unwrap();
-                    }
-                // }
+        if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) =
+            nt_funcs::is_prime(&x, None)
+        {
+            x <<= 1;
+            x += 1u8;
+            // for _ in 0..25 {
+            if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) =
+                nt_funcs::is_prime(&x, None)
+            {
+                return x.to_bigint().unwrap();
+            }
+            // }
             // }
         }
 
@@ -274,11 +280,9 @@ impl CrtExp {
 
         // `e_mod_phi_pp` and `e_mod_phi_qq` are guaranteed to be non-negative by construction
         #[allow(clippy::expect_used)]
-        let r1 = s1
-            .modpow(&e.e_mod_phi_pp, &self.n1);
+        let r1 = s1.modpow(&e.e_mod_phi_pp, &self.n1);
         #[allow(clippy::expect_used)]
-        let r2 = s2
-            .modpow(&e.e_mod_phi_qq, &self.n2);
+        let r2 = s2.modpow(&e.e_mod_phi_qq, &self.n2);
 
         let result = ((r2 - &r1) * &self.beta) % (&self.n2) * &self.n1 + &r1;
 
@@ -309,10 +313,10 @@ impl fmt::Debug for Exponent {
 #[cfg(test)]
 mod test {
     use num_bigint::BigInt;
-    use std::vec;
-    use rand;
-    use num_traits::One;
     use num_integer::Integer;
+    use num_traits::One;
+    use rand;
+    use std::vec;
 
     #[test]
     fn safe_prime_size() {

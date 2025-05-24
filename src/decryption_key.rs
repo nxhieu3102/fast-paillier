@@ -1,10 +1,10 @@
-use rand_core::{CryptoRng, RngCore};
+use crate::common::BigIntExt;
 use crate::{utils, AnyEncryptionKey, Bug, Ciphertext, EncryptionKey, Nonce, Plaintext};
 use crate::{Error, Reason};
 use num_bigint::BigInt;
 use num_integer::Integer;
-use crate::common::BigIntExt;
 use num_traits::Num;
+use rand_core::{CryptoRng, RngCore};
 /// Paillier decryption key
 #[derive(Clone, Debug)]
 pub struct DecryptionKey {
@@ -227,9 +227,7 @@ impl DecryptionKey {
         let l = (u - 1) / self.n();
 
         // (2 * alpha)^{-1} mod N
-        let two_alpha_inv = two_alpha
-            .modinv(self.n())
-            .ok_or(Bug::InvertUndef)?;
+        let two_alpha_inv = two_alpha.modinv(self.n()).ok_or(Bug::InvertUndef)?;
 
         // plaintext = L(c^(2*alpha) mod N^2, N) * (2*alpha)^{-1} mod N
         let plaintext = l * &two_alpha_inv % self.n();

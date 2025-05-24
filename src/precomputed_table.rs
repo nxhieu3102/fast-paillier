@@ -29,14 +29,11 @@ impl PrecomputeTable {
         for i in 0..=num_blocks {
             for j in 0..=max_block_value {
                 // tmp1 = 2^(i*block_size) % modulo
-                let tmp1 = BigInt::from(2)
-                    .modpow(&BigInt::from((i * block_size) as u32), modulo);
+                let tmp1 = BigInt::from(2).modpow(&BigInt::from((i * block_size) as u32), modulo);
                 // tmp2 = base^(tmp1) % modulo
                 let tmp2: BigInt = base.clone().modpow(&tmp1, modulo);
                 // tmp3 = tmp2^j % modulo
-                let tmp3: BigInt = tmp2
-                    .clone()
-                    .modpow(&BigInt::from(j as u32), modulo);
+                let tmp3: BigInt = tmp2.clone().modpow(&BigInt::from(j as u32), modulo);
                 table[i][j] = tmp3;
             }
         }
@@ -65,8 +62,7 @@ impl PrecomputeTable {
         for i in 1..=num_blocks {
             // Compute 2^(i*block_size) = 2^((i-1)*block_size) * 2^block_size
             let prev = &pow_2[i - 1];
-            let block_exp = BigInt::from(2)
-                .modpow(&BigInt::from(block_size as u32), modulo);
+            let block_exp = BigInt::from(2).modpow(&BigInt::from(block_size as u32), modulo);
             pow_2[i] = (prev * &block_exp) % modulo;
         }
 

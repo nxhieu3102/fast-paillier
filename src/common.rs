@@ -1,4 +1,4 @@
-use num_bigint::{BigInt};
+use num_bigint::BigInt;
 use num_traits::Signed;
 
 /// Extension trait for BigInt
@@ -6,7 +6,6 @@ pub trait BigIntExt: Sized {
     /// Returns `self ^ exp mod modulo`
     fn modpow_ext(&self, exp: &Self, modulo: &Self) -> Option<Self>;
 }
-
 
 impl BigIntExt for BigInt {
     fn modpow_ext(&self, exp: &Self, modulo: &Self) -> Option<Self> {

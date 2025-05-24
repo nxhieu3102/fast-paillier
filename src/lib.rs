@@ -1,6 +1,8 @@
 #![doc = include_str!("../README.md")]
 #![forbid(missing_docs)]
 
+/// Common types and functions
+pub mod common;
 /// Module for decryption key functionality
 pub mod decryption_key;
 /// Module for encryption key functionality
@@ -9,16 +11,14 @@ pub mod encryption_key;
 pub mod precomputed_table;
 /// Utility functions for the Paillier cryptosystem
 pub mod utils;
-/// Common types and functions
-pub mod common;
 
 #[cfg(feature = "serde")]
 mod serde;
 
 use std::fmt;
 
-use rand_core::{CryptoRng, RngCore};
 use num_bigint::BigInt;
+use rand_core::{CryptoRng, RngCore};
 
 /// Paillier ciphertext
 pub type Ciphertext = BigInt;
