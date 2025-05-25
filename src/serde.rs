@@ -4,6 +4,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json;
 
 use crate::{DecryptionKey, EncryptionKey, Error, Reason};
+use num_bigint::BigInt;
 
 // Serializable representation of EncryptionKey
 #[derive(Serialize, Deserialize)]
@@ -29,13 +30,13 @@ struct SerializableDecryptionKey {
 }
 
 // Convert Integer to hex string
-fn integer_to_hex(value: &Integer) -> String {
+fn integer_to_hex(value: &BigInt) -> String {
     format!("{:x}", value)
 }
 
 // Convert hex string to Integer
-fn hex_to_integer(hex: &str) -> Result<Integer, Error> {
-    Integer::from_str_radix(hex, 16).map_err(|_| Error::from(Reason::Ops))
+fn hex_to_integer(hex: &str) -> Result<BigInt, Error> {
+    BigInt::from_str_radix(hex, 16).map_err(|_| Error::from(Reason::Ops))
 }
 
 impl Serialize for EncryptionKey {
@@ -209,7 +210,7 @@ mod tests {
         assert_eq!(ek.n_size(), 3072);
         assert_eq!(ek.a_size(), 512);
         assert_eq!(ek.nounce_size(), 512);
-        assert_eq!((ek.half_n() + ek.neg_half_n()).complete(), Integer::ZERO);
+        assert_eq!((ek.half_n() + ek.neg_half_n()).complete(), BigInt::from(0));
         assert_eq!(&(ek.n() * ek.n()).complete(), ek.nn());
     }
 
@@ -238,7 +239,7 @@ mod tests {
         assert_eq!(dk.a_size(), 512);
         assert_eq!(dk.nounce_size(), 512);
         assert_eq!(&(dk.p() * dk.q()).complete(), dk.n());
-        assert_eq!((dk.half_n() + dk.neg_half_n()).complete(), Integer::ZERO);
+        assert_eq!((dk.half_n() + dk.neg_half_n()).complete(), BigInt::from(0));
         assert_eq!(&(dk.n() * dk.n()).complete(), dk.nn());
     }
 }

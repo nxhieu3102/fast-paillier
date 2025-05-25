@@ -42,6 +42,8 @@ enum Reason {
     Ops,
     #[error("bug occurred")]
     Bug(#[source] Bug),
+    #[error("invalid pow mod")]
+    InvalidPowMod,
 }
 
 #[derive(Debug, thiserror::Error)]

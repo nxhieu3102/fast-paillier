@@ -123,6 +123,7 @@ pub fn check_coprime(v: &[&BigInt]) -> bool {
 }
 
 /// Generates a random safe prime
+/// Currently, this function will generate a safe and blum prime
 pub fn generate_safe_prime(rng: &mut impl RngCore, bits: u32) -> BigInt {
     sieve_generate_safe_primes(rng, bits, 135)
 }
@@ -262,8 +263,8 @@ impl CrtExp {
         let neg_e = -e;
         let is_negative = e < &BigInt::ZERO;
         let e = if is_negative { &neg_e } else { e };
-        let e_mod_phi_pp = e % &self.phi_n1;
-        let e_mod_phi_qq = e % &self.phi_n2;
+        let e_mod_phi_pp = e.mod_floor(&self.phi_n1);
+        let e_mod_phi_qq = e.mod_floor(&self.phi_n2);
         Exponent {
             e_mod_phi_pp,
             e_mod_phi_qq,
@@ -275,8 +276,8 @@ impl CrtExp {
     ///
     /// Exponent needs to be output of [`CrtExp::prepare_exponent`]
     pub fn exp(&self, x: &BigInt, e: &Exponent) -> Option<BigInt> {
-        let s1 = x % &self.n1;
-        let s2 = x % &self.n2;
+        let s1 = x.mod_floor(&self.n1);
+        let s2 = x.mod_floor(&self.n2);
 
         // `e_mod_phi_pp` and `e_mod_phi_qq` are guaranteed to be non-negative by construction
         #[allow(clippy::expect_used)]
@@ -284,7 +285,7 @@ impl CrtExp {
         #[allow(clippy::expect_used)]
         let r2 = s2.modpow(&e.e_mod_phi_qq, &self.n2);
 
-        let result = ((r2 - &r1) * &self.beta) % (&self.n2) * &self.n1 + &r1;
+        let result = ((r2 - &r1) * &self.beta).mod_floor(&self.n2) * &self.n1 + &r1;
 
         if e.is_negative {
             result.modinv(&self.n)

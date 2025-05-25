@@ -1,10 +1,13 @@
+use crate::common::BigIntExt;
 use crate::precomputed_table::PrecomputeTable;
 use crate::{utils, Ciphertext, Nonce, Plaintext};
-use crate::{Bug, Error, Reason};
+use crate::{Error, Reason};
 use num_bigint::BigInt;
+use num_integer::Integer;
 use num_traits::Num;
 use num_traits::One;
 use rand_core::{CryptoRng, RngCore};
+use std::f32::consts::E;
 /// Paillier encryption key
 #[derive(Clone, Debug)]
 pub struct EncryptionKey {
@@ -48,7 +51,10 @@ impl EncryptionKey {
         let nn = n.clone() * &n;
         let half_n = n.clone() >> 1u32;
         let neg_half_n = -half_n.clone();
-        let h_pow_n = h.clone().modpow(&n, &nn);
+        let h_pow_n = h
+            .clone()
+            .modpow_ext(&n, &nn)
+            .ok_or(Error(Reason::InvalidPowMod))?;
 
         Ok(Self {
             n_size,
@@ -172,11 +178,19 @@ impl EncryptionKey {
         };
 
         // a = (1 + N)^x mod N^2 = (1 + xN) mod N^2
-        let a = (BigInt::one() + (&x * self.n())) % self.nn();
+        let a = (BigInt::one() + (&x * self.n())).mod_floor(self.nn());
         // b = (h^nonce mod N)^N mod N^2 = (h^n mod N^2)^nonce mod N^2 = h_pow_n^nonce mod N^2
-        let b = self.h_pow_n().clone().modpow(nonce, self.nn());
+        let b = self
+            .h_pow_n()
+            .clone()
+            .modpow_ext(nonce, self.nn())
+            .ok_or(Error(Reason::InvalidPowMod))?;
 
-        let c = (a * b) % self.nn();
+        let c = (a * b).mod_floor(self.nn());
+        assert!(
+            utils::in_mult_group(&c, self.nn()),
+            "Ciphertext is not in the multiplicative group"
+        );
         Ok(c)
     }
 
@@ -206,7 +220,7 @@ impl EncryptionKey {
         if !utils::in_mult_group(c1, self.nn()) || !utils::in_mult_group(c2, self.nn()) {
             return Err(Reason::Ops.into());
         }
-        Ok((c1 * c2) % self.nn())
+        Ok((c1 * c2).mod_floor(self.nn()))
     }
 
     /// Homomorphic subtraction of two ciphertexts
@@ -219,7 +233,7 @@ impl EncryptionKey {
             return Err(Reason::Ops.into());
         }
         let c2 = self.oneg(c2)?;
-        Ok((c1 * c2) % self.nn())
+        Ok((c1 * c2).mod_floor(self.nn()))
     }
 
     /// Homomorphic multiplication of scalar at ciphertext
@@ -234,7 +248,9 @@ impl EncryptionKey {
             return Err(Reason::Ops.into());
         }
 
-        Ok(ciphertext.modpow(scalar, self.nn()))
+        ciphertext
+            .modpow_ext(scalar, self.nn())
+            .ok_or(Error(Reason::Ops))
     }
 
     /// Homomorphic negation of a ciphertext
@@ -260,9 +276,9 @@ impl EncryptionKey {
         let h_pow_rn = Self::pow(precompute_table, &r);
 
         // g_pow_m = g^m = (1 + n) ^ m = (1 + n * m) mod n^2
-        let g_pow_m = ((m * &self.n) + 1) % &self.nn;
+        let g_pow_m = ((m * &self.n) + BigInt::from(1)).mod_floor(&self.nn);
 
-        let c = (g_pow_m * h_pow_rn) % &self.nn;
+        let c = (g_pow_m * h_pow_rn).mod_floor(&self.nn);
         Ok(c)
     }
 
@@ -271,8 +287,8 @@ impl EncryptionKey {
         let mut result = BigInt::from(1);
 
         for (id, pow_block) in pow_blocks.iter().enumerate() {
-            result =
-                (result * &precompute_table.table()[id][*pow_block]) % (precompute_table.modulo());
+            result = (result * &precompute_table.table()[id][*pow_block])
+                .mod_floor(precompute_table.modulo());
         }
 
         result
@@ -290,8 +306,8 @@ impl EncryptionKey {
 
         for bit_id in 0..pow_size {
             if x.bit(bit_id as u64) {
-                // bit_id in is the (bit_id % block_size) bit of group (bit_id / block_size)
-                // turn on the (bit_id % block_size) bit of group (bit_id / block_size)
+                // bit_id in is the (bit_id.mod_floor(block_size) bit of group (bit_id / block_size)
+                // turn on the (bit_id.mod_floor(block_size) bit of group (bit_id / block_size)
                 let block_id = bit_id / block_size;
                 let bit_id = bit_id % block_size;
                 result[block_id] |= 1 << bit_id;
