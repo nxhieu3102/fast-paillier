@@ -1,0 +1,12 @@
+{
+  "name": "fast-paillier-wasm-example",
+  "version": "0.1.0",
+  "description": "WASM example for Fast Paillier library",
+  "scripts": {
+    "build": "wasm-pack build --target web --out-dir examples/wasm/pkg --out-name fast_paillier ../../",
+    "serve": "npx serve ."
+  },
+  "devDependencies": {
+    "serve": "^14.2.1"
+  }
+} 

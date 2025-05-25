@@ -15,6 +15,10 @@ pub mod utils;
 #[cfg(feature = "serde")]
 mod serde;
 
+// #[cfg(feature = "wasm")]
+/// WebAssembly bindings for the Paillier cryptosystem
+pub mod wasm;
+
 use std::fmt;
 
 use num_bigint::BigInt;
