@@ -1,9 +1,11 @@
 use fast_paillier::utils;
 use fast_paillier::AnyEncryptionKey;
-use rug::Integer;
+use num_bigint::{BigInt, RandBigInt, BigUint};
+use num_prime::nt_funcs;
+use rand;
 
 fn encryption(c: &mut criterion::Criterion) {
-    let mut rng = rand_dev::DevRng::new();
+    let mut rng = rand::thread_rng();
 
     let dk: fast_paillier::DecryptionKey = fast_paillier::DecryptionKey::sample_128();
     let ek = dk.encryption_key();
@@ -16,11 +18,13 @@ fn encryption(c: &mut criterion::Criterion) {
     let mut group = c.benchmark_group("Encrypt");
 
     let mut generate_inputs = || {
-        let x = ek
-            .n()
-            .clone()
-            .random_below(&mut fast_paillier::utils::external_rand(&mut rng))
-            - ek.half_n();
+        let neg_n = ek.n() * -1;
+        let x = rng.gen_bigint_range(&neg_n, &ek.n());
+        // let x = ek
+        //     .n()
+        //     .clone()
+        //     .random_below(&mut fast_paillier::utils::external_rand(&mut rng))
+        //     - ek.half_n();
         let nonce = fast_paillier::utils::sample_in_mult_group(&mut rng, ek.n());
         (x, nonce)
     };
@@ -33,18 +37,20 @@ fn encryption(c: &mut criterion::Criterion) {
         )
     });
 
-    let mut fresh_rng = rand_dev::DevRng::new();
+    let mut fresh_rng = rand::thread_rng();
     let mut precompute_inputs = || {
-        let x = ek
-            .n()
-            .clone()
-            .random_below(&mut fast_paillier::utils::external_rand(&mut fresh_rng))
-            - ek.half_n();
+        let neg_n = ek.n() * -1;
+        let x = rng.gen_bigint_range(&neg_n, &ek.n());
+        // let x = ek
+        //     .n()
+        //     .clone()
+        //     .random_below(&mut fast_paillier::utils::external_rand(&mut fresh_rng))
+        //     - ek.half_n();
         x
     };
 
     group.bench_function("Encrypt with precompute table", |b| {
-        let mut bench_rng = rand_dev::DevRng::new();
+        let mut bench_rng = rand::thread_rng();
         b.iter_batched(
             &mut precompute_inputs,
             |x| {
@@ -57,7 +63,7 @@ fn encryption(c: &mut criterion::Criterion) {
 }
 
 fn decryption(c: &mut criterion::Criterion) {
-    let mut rng = rand_dev::DevRng::new();
+    let mut rng = rand::thread_rng();
     let dk = fast_paillier::DecryptionKey::sample_128();
     let ek = dk.encryption_key();
 
@@ -75,7 +81,7 @@ fn decryption(c: &mut criterion::Criterion) {
 }
 
 fn omul(c: &mut criterion::Criterion) {
-    let mut rng = rand_dev::DevRng::new();
+    let mut rng = rand::thread_rng();
 
     let dk = fast_paillier::DecryptionKey::sample_128();
     let ek = dk.encryption_key();
@@ -83,10 +89,12 @@ fn omul(c: &mut criterion::Criterion) {
     let mut group = c.benchmark_group("OMul");
 
     let mut generate_inputs = || {
-        let scalar = ek
-            .nn()
-            .random_below_ref(&mut utils::external_rand(&mut rng))
-            .into();
+        let neg_n = ek.n() * -1;
+        let scalar = rng.gen_bigint_range(&neg_n, &ek.n());
+        // let scalar = ek
+        //     .nn()
+        //     .random_below_ref(&mut utils::external_rand(&mut rng))
+        //     .into();
         let enc_x = utils::sample_in_mult_group(&mut rng, ek.nn());
         (scalar, enc_x)
     };
@@ -108,25 +116,36 @@ fn omul(c: &mut criterion::Criterion) {
 }
 
 /// Old implementation of safe primes
-pub fn naive_safe_prime(rng: &mut impl rand_core::RngCore, bits: u32) -> Integer {
-    use rug::{integer::IsPrime, Assign};
-    let mut rng = utils::external_rand(rng);
-    let mut x = Integer::new();
+pub fn naive_safe_prime(rng: &mut impl rand_core::RngCore, bits: u32) -> BigInt {
+    // use rug::{integer::IsPrime, Assign};
+    // let mut rng = utils::external_rand(rng);
+    let mut rng = rand::thread_rng();
+    // let mut x = BigInt::new(1);
+    let mut x = BigInt::from(0);
     loop {
-        x.assign(Integer::random_bits(bits - 1, &mut rng));
-        x.set_bit(bits - 2, true);
-        x.next_prime_mut();
+        x = rng.gen_bigint_range(&BigInt::from(0), &BigInt::from(2).pow(bits - 1));
+        x.set_bit(bits as u64 - 2, true);
+        // x.assign(Integer::random_bits(bits - 1, &mut rng));
+        // x.set_bit(bits - 2, true);
+        // x.next_prime_mut();
         x <<= 1;
         x += 1;
 
-        if let IsPrime::Yes | IsPrime::Probably = x.is_probably_prime(25) {
-            return x;
+        // if let IsPrime::Yes | IsPrime::Probably = x.is_probably_prime(25) {
+        //     return x;
+        // }
+        for _ in 0..25 {
+            if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) =
+                nt_funcs::is_prime(&x.to_biguint().unwrap(), None)
+            {
+                return x;
+            }
         }
     }
 }
 
 fn safe_primes(c: &mut criterion::Criterion) {
-    let rng = rand_dev::DevRng::new();
+    let mut rng = rand::thread_rng();
 
     let mut group = c.benchmark_group("Safe primes");
     for (bits, sample_size) in [(512, 200), (1024, 10), (1536, 10)] {
@@ -151,19 +170,19 @@ fn safe_primes(c: &mut criterion::Criterion) {
     }
 }
 
-fn rng_covertion(c: &mut criterion::Criterion) {
-    let mut rng = rand_dev::DevRng::new();
+// fn rng_covertion(c: &mut criterion::Criterion) {
+//     let mut rng = rand::thread_rng();
 
-    let mut group = c.benchmark_group("PRNG convertion");
+//     let mut group = c.benchmark_group("PRNG convertion");
 
-    group.bench_function("into GMP", |b| {
-        b.iter(|| {
-            let mut gmp_rng = fast_paillier::utils::external_rand(std::hint::black_box(&mut rng));
-            let dyn_rng: &mut dyn rug::rand::MutRandState = &mut gmp_rng;
-            let _ = std::hint::black_box(dyn_rng);
-        })
-    });
-}
+//     group.bench_function("into GMP", |b| {
+//         b.iter(|| {
+//             let mut gmp_rng = fast_paillier::utils::external_rand(std::hint::black_box(&mut rng));
+//             let dyn_rng: &mut dyn rug::rand::MutRandState = &mut gmp_rng;
+//             let _ = std::hint::black_box(dyn_rng);
+//         })
+//     });
+// }
 
 criterion::criterion_group!(
     benches,
@@ -171,11 +190,11 @@ criterion::criterion_group!(
     decryption,
     omul,
     safe_primes,
-    rng_covertion
+    // rng_covertion
 );
 criterion::criterion_main!(benches);
 
-fn convert_integer_to_unknown_order(x: &Integer) -> libpaillier::unknown_order::BigNumber {
-    let bytes = x.to_digits::<u8>(rug::integer::Order::Msf);
-    libpaillier::unknown_order::BigNumber::from_slice(&bytes)
-}
+// fn convert_integer_to_unknown_order(x: &Integer) -> libpaillier::unknown_order::BigNumber {
+//     let bytes = x.to_digits::<u8>(rug::integer::Order::Msf);
+//     libpaillier::unknown_order::BigNumber::from_slice(&bytes)
+// }

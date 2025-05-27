@@ -6,7 +6,6 @@ use serde_json;
 use crate::{DecryptionKey, EncryptionKey, Error, Reason};
 use num_bigint::BigInt;
 use num_traits::Num;
-
 // Serializable representation of EncryptionKey
 #[derive(Serialize, Deserialize)]
 struct SerializableEncryptionKey {
@@ -211,8 +210,8 @@ mod tests {
         assert_eq!(ek.n_size(), 3072);
         assert_eq!(ek.a_size(), 512);
         assert_eq!(ek.nounce_size(), 512);
-        assert_eq!((ek.half_n() + ek.neg_half_n()).complete(), BigInt::from(0));
-        assert_eq!(&(ek.n() * ek.n()).complete(), ek.nn());
+        assert_eq!(ek.half_n() + ek.neg_half_n(), BigInt::from(0));
+        assert_eq!(&(ek.n() * ek.n()), ek.nn());
     }
 
     #[test]
@@ -239,8 +238,8 @@ mod tests {
         assert_eq!(dk.n_size(), 3072);
         assert_eq!(dk.a_size(), 512);
         assert_eq!(dk.nounce_size(), 512);
-        assert_eq!(&(dk.p() * dk.q()).complete(), dk.n());
-        assert_eq!((dk.half_n() + dk.neg_half_n()).complete(), BigInt::from(0));
-        assert_eq!(&(dk.n() * dk.n()).complete(), dk.nn());
+        assert_eq!(&(dk.p() * dk.q()), dk.n());
+        assert_eq!(dk.half_n() + dk.neg_half_n(), BigInt::from(0));
+        assert_eq!(&(dk.n() * dk.n()), dk.nn());
     }
 }

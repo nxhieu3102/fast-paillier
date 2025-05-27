@@ -8,7 +8,10 @@ use num_prime::nt_funcs;
 use num_traits::identities::One;
 use num_traits::Zero;
 use rand::RngCore;
+use std::str::FromStr;
 mod small_primes;
+
+
 
 /// Wraps any randomness source that implements [`rand_core::RngCore`] and makes
 /// it compatible with [`rug::rand`].
@@ -192,14 +195,144 @@ pub fn sieve_generate_safe_primes(rng: &mut impl RngCore, bits: u32, amount: usi
 /// `CrtExp` makes exponentation modulo `n` faster when factorization `n = n1 * n2` is known as well as `phi(n1)` and `phi(n2)`
 /// (note that `n1` and `n2` don't need to be primes). In this case, you can [build](Self::build) a `CrtExp` and use provided
 /// [exponentiation algorithm](Self::exp).
+use serde::{Deserialize, Serialize, Serializer, Deserializer};
+use serde::de::Error;
+
+/// A wrapper around BigInt that implements Serialize and Deserialize
+// #[derive(Clone)]
+pub mod serializable_bigint{
+    use std::str::FromStr;
+
+    use num_bigint::BigInt;
+    use serde::{Deserialize, Serialize, Serializer, Deserializer};
+    use serde::de::Error;
+
+    /// Serialize a BigInt to a string
+    pub fn serialize<S>(_value: &BigInt, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&_value.to_str_radix(10))
+    }
+
+    /// Deserialize a BigInt from a string
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<BigInt, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(BigInt::from_str(&s).map_err(Error::custom)?)
+    }
+}
+
+/// Serialize a vector of BigInts to a string
+pub mod serializable_vec_bigint{
+    use std::str::FromStr;
+
+    use num_bigint::BigInt;
+    use serde::{Deserialize, Serialize, Serializer, Deserializer};
+    use serde::de::Error;
+
+    /// Serialize a vector of BigInts to a string
+    pub fn serialize<S>(_value: &Vec<BigInt>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&_value.iter().map(|x| x.to_str_radix(10)).collect::<Vec<String>>().join(","))
+    }
+
+    /// Deserialize a vector of BigInts from a string
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<BigInt>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(s.split(",").map(|x| BigInt::from_str(x).map_err(Error::custom)).collect::<Result<Vec<BigInt>, D::Error>>()?)
+    }
+}
+
+
+/// Serialize a array of BigInts to a string
+pub mod serializable_array_bigint{
+    use std::str::FromStr;
+
+    use num_bigint::BigInt;
+    use serde::{Deserialize, Serialize, Serializer, Deserializer};
+    use serde::de::Error;
+
+    /// Serialize a vector of BigInts to a string
+    pub fn serialize<S, const N: usize>(_value: &[BigInt; N], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&_value.iter().map(|x| x.to_str_radix(10)).collect::<Vec<String>>().join(","))
+    }
+
+    /// Deserialize a vector of BigInts from a string
+    pub fn deserialize<'de, D, const N: usize>(deserializer: D) -> Result<[BigInt; N], D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let values = s.split(",").map(|x| BigInt::from_str(x).map_err(Error::custom)).collect::<Result<Vec<BigInt>, D::Error>>()?;
+        if values.len() != N {
+            return Err(D::Error::custom(format!("Expected array of length {}, got {}", N, values.len())));
+        }
+        let mut result = [BigInt::ZERO; N];
+        for (i, value) in values.iter().enumerate() {
+            result[i] = value.clone();
+        }
+        Ok(result)
+    }
+}
+
+
+// impl SerializableBigInt {
+//     /// Create a new SerializableBigInt
+//     pub fn new(value: BigInt) -> Self {
+//         SerializableBigInt(value)
+//     }
+    
+//     /// Get the underlying BigInt
+//     pub fn as_bigint(&self) -> &BigInt {
+//         &self.0
+//     }
+// }
+
+// impl Serialize for SerializableBigInt {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: Serializer,
+//     {
+//         serializer.serialize_str(&self.0.to_str_radix(10))
+//     }
+// }
+
+// impl<'de> Deserialize<'de> for SerializableBigInt {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         let s = String::deserialize(deserializer)?;
+//         Ok(SerializableBigInt(BigInt::from_str(&s).map_err(Error::custom)?))
+//     }
+// }
+
+/// Faster algorithm for modular exponentiation based on Chinese remainder theorem when modulo factorization is known
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CrtExp {
+    #[serde(with = "serializable_bigint")]
     n: BigInt,
+    #[serde(with = "serializable_bigint")]
     n1: BigInt,
+    #[serde(with = "serializable_bigint")]
     phi_n1: BigInt,
+    #[serde(with = "serializable_bigint")]
     n2: BigInt,
+    #[serde(with = "serializable_bigint")]
     phi_n2: BigInt,
+    #[serde(with = "serializable_bigint")]
     beta: BigInt,
 }
 
@@ -207,7 +340,9 @@ pub struct CrtExp {
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Exponent {
+    #[serde(with = "serializable_bigint")]
     e_mod_phi_pp: BigInt,
+    #[serde(with = "serializable_bigint")]
     e_mod_phi_qq: BigInt,
     is_negative: bool,
 }
