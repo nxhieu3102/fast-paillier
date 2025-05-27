@@ -5,6 +5,7 @@ use serde_json;
 
 use crate::{DecryptionKey, EncryptionKey, Error, Reason};
 use num_bigint::BigInt;
+use num_traits::Num;
 
 // Serializable representation of EncryptionKey
 #[derive(Serialize, Deserialize)]

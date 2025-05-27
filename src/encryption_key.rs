@@ -7,7 +7,6 @@ use num_integer::Integer;
 use num_traits::Num;
 use num_traits::One;
 use rand_core::{CryptoRng, RngCore};
-use std::f32::consts::E;
 /// Paillier encryption key
 #[derive(Clone, Debug)]
 pub struct EncryptionKey {
