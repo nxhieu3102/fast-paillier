@@ -88,7 +88,7 @@ mod sealed {
 ///     Ok(ciphertext)
 /// }
 /// ```
-
+///
 pub trait AnyEncryptionKey: sealed::Sealed {
     /// Returns the size of `N` in bits
     fn n_size(&self) -> u32;

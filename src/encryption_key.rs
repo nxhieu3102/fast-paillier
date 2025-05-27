@@ -258,7 +258,7 @@ impl EncryptionKey {
     /// oneg(Enc(a)) = Enc(-a)
     /// ```
     pub fn oneg(&self, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
-        Ok(ciphertext.modinv(self.nn()).ok_or(Reason::Ops)?.into())
+        Ok(ciphertext.modinv(self.nn()).ok_or(Reason::Ops)?)
     }
 }
 
@@ -282,7 +282,7 @@ impl EncryptionKey {
     }
 
     fn pow(precompute_table: &PrecomputeTable, pow: &BigInt) -> BigInt {
-        let pow_blocks = Self::convert_into_blocks(precompute_table, &pow);
+        let pow_blocks = Self::convert_into_blocks(precompute_table, pow);
         let mut result = BigInt::from(1);
 
         for (id, pow_block) in pow_blocks.iter().enumerate() {

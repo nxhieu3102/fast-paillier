@@ -1,11 +1,9 @@
-use serde::de::{self};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-#[cfg(feature = "serde")]
-use serde_json;
-
 use crate::{DecryptionKey, EncryptionKey, Error, Reason};
 use num_bigint::BigInt;
 use num_traits::Num;
+use serde::de::{self};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 // Serializable representation of EncryptionKey
 #[derive(Serialize, Deserialize)]
 struct SerializableEncryptionKey {
@@ -29,12 +27,12 @@ struct SerializableDecryptionKey {
     alpha: String,
 }
 
-// Convert Integer to hex string
+// Convert BigInt to hex string
 fn integer_to_hex(value: &BigInt) -> String {
     format!("{:x}", value)
 }
 
-// Convert hex string to Integer
+// Convert hex string to BigInt
 fn hex_to_integer(hex: &str) -> Result<BigInt, Error> {
     BigInt::from_str_radix(hex, 16).map_err(|_| Error::from(Reason::Ops))
 }

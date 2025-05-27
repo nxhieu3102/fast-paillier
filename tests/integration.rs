@@ -1,11 +1,11 @@
 // TODO: update integration test
 
 use fast_paillier::AnyEncryptionKey;
-use fast_paillier::{utils, DecryptionKey};
-use num_bigint::{BigInt, RandBigInt};
-use num_traits::{One, Zero};
+use fast_paillier::DecryptionKey;
+use num_bigint::RandBigInt;
 use rand;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, RngCore};
+
 #[test]
 fn encrypt_decrypt() {
     let mut rng = rand::thread_rng();
@@ -17,11 +17,6 @@ fn encrypt_decrypt() {
         let lbound = -ek.n() / 2u8;
         let ubound = ek.n() / 2u8;
         let plaintext = rng.gen_bigint_range(&lbound, &ubound);
-        // let plaintext = ek
-        //     .n()
-        //     .clone()
-        //.random_below(&mut utils::external_rand(&mut rng));
-        // let plaintext = plaintext - (ek.n() / 2u8);
         println!("Plaintext: {plaintext}");
 
         // Encrypt and decrypt
@@ -37,7 +32,6 @@ fn encrypt_decrypt() {
     }
 
     // Check corner cases
-
     let lower_bound = -(ek.n() / 2u8);
     let upper_bound = (ek.n() / 2u8);
 

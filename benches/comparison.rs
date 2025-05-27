@@ -1,6 +1,6 @@
 use fast_paillier::utils;
 use fast_paillier::AnyEncryptionKey;
-use num_bigint::{BigInt, BigUint, RandBigInt};
+use num_bigint::{BigInt, RandBigInt};
 use num_prime::nt_funcs;
 use rand;
 
@@ -20,11 +20,6 @@ fn encryption(c: &mut criterion::Criterion) {
     let mut generate_inputs = || {
         let neg_n = ek.n() * -1;
         let x = rng.gen_bigint_range(&neg_n, &ek.n());
-        // let x = ek
-        //     .n()
-        //     .clone()
-        //     .random_below(&mut fast_paillier::utils::external_rand(&mut rng))
-        //     - ek.half_n();
         let nonce = fast_paillier::utils::sample_in_mult_group(&mut rng, ek.n());
         (x, nonce)
     };
@@ -37,15 +32,9 @@ fn encryption(c: &mut criterion::Criterion) {
         )
     });
 
-    let mut fresh_rng = rand::thread_rng();
     let mut precompute_inputs = || {
         let neg_n = ek.n() * -1;
         let x = rng.gen_bigint_range(&neg_n, &ek.n());
-        // let x = ek
-        //     .n()
-        //     .clone()
-        //     .random_below(&mut fast_paillier::utils::external_rand(&mut fresh_rng))
-        //     - ek.half_n();
         x
     };
 
@@ -117,23 +106,13 @@ fn omul(c: &mut criterion::Criterion) {
 
 /// Old implementation of safe primes
 pub fn naive_safe_prime(rng: &mut impl rand_core::RngCore, bits: u32) -> BigInt {
-    // use rug::{integer::IsPrime, Assign};
-    // let mut rng = utils::external_rand(rng);
-    let mut rng = rand::thread_rng();
-    // let mut x = BigInt::new(1);
-    let mut x = BigInt::from(0);
+    let mut x = BigInt::from(1);
     loop {
         x = rng.gen_bigint_range(&BigInt::from(0), &BigInt::from(2).pow(bits - 1));
         x.set_bit(bits as u64 - 2, true);
-        // x.assign(Integer::random_bits(bits - 1, &mut rng));
-        // x.set_bit(bits - 2, true);
-        // x.next_prime_mut();
         x <<= 1;
         x += 1;
 
-        // if let IsPrime::Yes | IsPrime::Probably = x.is_probably_prime(25) {
-        //     return x;
-        // }
         for _ in 0..25 {
             if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) =
                 nt_funcs::is_prime(&x.to_biguint().unwrap(), None)
@@ -145,7 +124,7 @@ pub fn naive_safe_prime(rng: &mut impl rand_core::RngCore, bits: u32) -> BigInt 
 }
 
 fn safe_primes(c: &mut criterion::Criterion) {
-    let mut rng = rand::thread_rng();
+    let rng = rand::thread_rng();
 
     let mut group = c.benchmark_group("Safe primes");
     for (bits, sample_size) in [(512, 200), (1024, 10), (1536, 10)] {

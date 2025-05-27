@@ -26,15 +26,16 @@ impl PrecomputeTable {
 
         let mut table = vec![vec![BigInt::from(1); max_block_value + 1]; num_blocks + 1];
 
-        for i in 0..=num_blocks {
-            for j in 0..=max_block_value {
+        for (i, row_i) in table.iter_mut().enumerate().take(num_blocks + 1) {
+            for (j, cell_ij) in row_i.iter_mut().enumerate().take(max_block_value + 1) {
                 // tmp1 = 2^(i*block_size) % modulo
                 let tmp1 = BigInt::from(2).modpow(&BigInt::from((i * block_size) as u32), modulo);
                 // tmp2 = base^(tmp1) % modulo
                 let tmp2: BigInt = base.clone().modpow(&tmp1, modulo);
                 // tmp3 = tmp2^j % modulo
                 let tmp3: BigInt = tmp2.clone().modpow(&BigInt::from(j as u32), modulo);
-                table[i][j] = tmp3;
+
+                *cell_ij = tmp3;
             }
         }
         table
@@ -53,8 +54,8 @@ impl PrecomputeTable {
         let mut table = vec![vec![BigInt::from(0); max_block_value + 1]; num_blocks + 1];
 
         // Handle j=0 case: any number raised to 0 is 1
-        for i in 0..=num_blocks {
-            table[i][0] = BigInt::from(1);
+        for row_i in table.iter_mut().take(num_blocks + 1) {
+            row_i[0] = BigInt::from(1);
         }
 
         // Precompute 2^(i*block_size) % modulo for each i

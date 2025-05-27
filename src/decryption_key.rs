@@ -242,7 +242,7 @@ impl DecryptionKey {
         let two_alpha_inv = two_alpha.modinv(self.n()).ok_or(Bug::InvertUndef)?;
 
         // plaintext = L(c^(2*alpha) mod N^2, N) * (2*alpha)^{-1} mod N
-        let plaintext: BigInt = BigInt::from(&l * &two_alpha_inv).mod_floor(self.n());
+        let plaintext = ((&l * &two_alpha_inv) as BigInt).mod_floor(self.n());
 
         // make sure plaintext is positive
         if plaintext > *self.half_n() {
