@@ -33,7 +33,7 @@ fn encrypt_decrypt() {
 
     // Check corner cases
     let lower_bound = -(ek.n() / 2u8);
-    let upper_bound = (ek.n() / 2u8);
+    let upper_bound = ek.n() / 2u8;
 
     let corner_cases = [
         lower_bound.clone(),
@@ -223,8 +223,6 @@ fn encrypt_decrypt() {
 //     }
 // }
 
-fn random_key_for_tests(rng: &mut (impl RngCore + CryptoRng)) -> DecryptionKey {
-    let n_size = 2048;
-    let a_size = 448;
+fn random_key_for_tests(_rng: &mut (impl RngCore + CryptoRng)) -> DecryptionKey {
     DecryptionKey::sample_128()
 }
