@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use fast_paillier::DecryptionKey;
-use std::time::Duration;
 use rand;
+use std::time::Duration;
 fn keygen(c: &mut Criterion) {
     let n_size = 3072;
     let a_size = 512;

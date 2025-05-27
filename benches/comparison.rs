@@ -1,6 +1,6 @@
 use fast_paillier::utils;
 use fast_paillier::AnyEncryptionKey;
-use num_bigint::{BigInt, RandBigInt, BigUint};
+use num_bigint::{BigInt, BigUint, RandBigInt};
 use num_prime::nt_funcs;
 use rand;
 
