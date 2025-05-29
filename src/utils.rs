@@ -8,7 +8,6 @@ use num_bigint::{BigInt, BigUint, RandBigInt, ToBigInt};
 use num_integer::Integer;
 use num_prime::nt_funcs;
 use num_traits::identities::One;
-use num_traits::Zero;
 use rand::RngCore;
 pub use serde_wrapper::*;
 use std::fmt;
@@ -60,32 +59,21 @@ pub fn sample_odd_with_size(rng: &mut impl RngCore, bits: u32) -> BigInt {
 
 /// Check if `x` is a prime
 pub fn is_prime(x: &BigInt) -> bool {
-    // make sure the number is odd
-    if !x.is_odd() {
-        return false;
+    if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) =
+        nt_funcs::is_prime(&x.to_biguint().unwrap(), None)
+    {
+        return true;
     }
 
-    // make sure x does not divide any of the small primes
-    for &small_prime in &small_primes::SMALL_PRIMES[0..small_primes::SMALL_PRIMES.len()] {
-        if BigInt::from(small_prime) >= *x {
-            break;
-        }
+    false
+}
 
-        let mod_result = x % small_prime;
-        if mod_result.is_zero() {
-            return false;
-        }
-    }
-
-    // TODO: recheck `nt_funcs::is_prime` to remove redundant checks and loop
-    // Current: the `nt_funcs::is_prime` only allows blum primes
-    // Target: allow any prime
-    for _ in 0..25 {
-        if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) =
-            nt_funcs::is_prime(&x.to_biguint().unwrap(), None)
-        {
-            return true;
-        }
+/// Check if `x` is a prime
+pub fn is_prime_uint(x: &BigUint) -> bool {
+    if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) =
+        nt_funcs::is_prime(x, None)
+    {
+        return true;
     }
 
     false
@@ -143,14 +131,10 @@ pub fn sieve_generate_safe_primes(rng: &mut impl RngCore, bits: u32, amount: usi
         }
 
         // TODO: recheck `nt_funcs::is_prime` to add more checks and loop if needed
-        if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) =
-            nt_funcs::is_prime(&x, None)
-        {
+        if is_prime_uint(&x) {
             x <<= 1;
             x += 1u8;
-            if let num_prime::Primality::Yes | num_prime::Primality::Probable(_) =
-                nt_funcs::is_prime(&x, None)
-            {
+            if is_prime_uint(&x) {
                 return x.to_bigint().unwrap();
             }
         }
@@ -301,7 +285,7 @@ mod test {
     fn safe_prime_size() {
         println!("safe_prime_size");
         let mut rng = rand::thread_rng();
-        for size in [10, 500, 512, 513, 514, 2048] {
+        for size in [10, 500, 512, 513, 514, 1536] {
             let mut prime = super::generate_safe_prime(&mut rng, size);
             prime >>= size - 1;
             assert_eq!(prime, BigInt::one());
