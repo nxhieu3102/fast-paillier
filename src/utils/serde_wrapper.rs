@@ -70,7 +70,8 @@ pub mod serializable_vec_bigint {
         D: Deserializer<'de>,
     {
         let format = VecBigIntFormat::deserialize(deserializer)?;
-        format.value
+        format
+            .value
             .split(",")
             .map(|x| BigInt::from_str_radix(x, format.radix).map_err(Error::custom))
             .collect::<Result<Vec<BigInt>, D::Error>>()
@@ -97,7 +98,16 @@ pub mod serializable_vec_vec_bigint {
     {
         let format = VecVecBigIntFormat {
             radix: 16, // Default to base 16
-            value: _value.iter().map(|x| x.iter().map(|y| y.to_str_radix(16)).collect::<Vec<String>>().join(",")).collect::<Vec<String>>().join(";"),
+            value: _value
+                .iter()
+                .map(|x| {
+                    x.iter()
+                        .map(|y| y.to_str_radix(16))
+                        .collect::<Vec<String>>()
+                        .join(",")
+                })
+                .collect::<Vec<String>>()
+                .join(";"),
         };
         format.serialize(serializer)
     }
@@ -108,7 +118,15 @@ pub mod serializable_vec_vec_bigint {
         D: Deserializer<'de>,
     {
         let format = VecVecBigIntFormat::deserialize(deserializer)?;
-        format.value.split(";").map(|x| x.split(",").map(|y| BigInt::from_str_radix(y, format.radix).map_err(Error::custom)).collect::<Result<Vec<BigInt>, D::Error>>()).collect::<Result<Vec<Vec<BigInt>>, D::Error>>()
+        format
+            .value
+            .split(";")
+            .map(|x| {
+                x.split(",")
+                    .map(|y| BigInt::from_str_radix(y, format.radix).map_err(Error::custom))
+                    .collect::<Result<Vec<BigInt>, D::Error>>()
+            })
+            .collect::<Result<Vec<Vec<BigInt>>, D::Error>>()
     }
 }
 
@@ -150,7 +168,8 @@ pub mod serializable_array_bigint {
         D: Deserializer<'de>,
     {
         let format = ArrayBigIntFormat::deserialize(deserializer)?;
-        let values = format.value
+        let values = format
+            .value
             .split(",")
             .map(|x| BigInt::from_str_radix(x, format.radix).map_err(Error::custom))
             .collect::<Result<Vec<BigInt>, D::Error>>()?;

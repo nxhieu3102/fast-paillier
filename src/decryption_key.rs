@@ -190,7 +190,7 @@ impl DecryptionKey {
 
         let div_p = utils::generate_safe_prime(rng, a_size / 2);
         let div_q = utils::generate_safe_prime(rng, a_size / 2);
-        
+
         // Basic assertions for generated primes
         if div_p.bits() != a_size as u64 / 2 || div_q.bits() != a_size as u64 / 2 {
             return None;
@@ -203,12 +203,14 @@ impl DecryptionKey {
 
         let other_div_p = utils::sample_odd_with_size(rng, other_bit_length);
         let other_div_q = utils::sample_odd_with_size(rng, other_bit_length);
-        
+
         // Check basic properties
         if !other_div_p.is_odd() || !other_div_q.is_odd() {
             return None;
         }
-        if other_div_p.bits() != other_bit_length as u64 || other_div_q.bits() != other_bit_length as u64 {
+        if other_div_p.bits() != other_bit_length as u64
+            || other_div_q.bits() != other_bit_length as u64
+        {
             return None;
         }
 

@@ -1,11 +1,11 @@
-use std::mem;
-use std::fs;
-use std::path::Path;
 use crate::utils::{serializable_bigint, serializable_vec_vec_bigint};
 use num_bigint::BigInt;
+use num_integer::Integer;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use num_integer::Integer;
+use std::fs;
+use std::mem;
+use std::path::Path;
 
 /// A table for precomputed values to speed up Paillier encryption operations.
 /// This table stores modular exponentiations for faster computation of cryptographic operations.
@@ -133,7 +133,10 @@ impl PrecomputeTable {
     ///
     /// # Returns
     /// * `Result<(), Box<dyn std::error::Error>>` - Success or error
-    pub fn save_to_file<P: AsRef<Path>>(&self, file_path: P) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn save_to_file<P: AsRef<Path>>(
+        &self,
+        file_path: P,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let json_string = serde_json::to_string_pretty(self)?;
         fs::write(file_path, json_string)?;
         Ok(())
@@ -146,7 +149,9 @@ impl PrecomputeTable {
     ///
     /// # Returns
     /// * `Result<PrecomputeTable, Box<dyn std::error::Error>>` - The loaded precomputed table or error
-    pub fn create_precomputable_from_cache<P: AsRef<Path>>(file_path: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn create_precomputable_from_cache<P: AsRef<Path>>(
+        file_path: P,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let json_string = fs::read_to_string(file_path)?;
         let table: PrecomputeTable = serde_json::from_str(&json_string)?;
         Ok(table)
@@ -207,7 +212,9 @@ mod tests {
         // Create and save precomputed table to cache
         let precompute = PrecomputeTable::new(base.clone(), block_size, pow_size, modulo.clone());
         let cache_file = "precompute_128b_cache.json";
-        precompute.save_to_file(cache_file).expect("Failed to save precompute table");
+        precompute
+            .save_to_file(cache_file)
+            .expect("Failed to save precompute table");
 
         // Load precomputed table from cache
         let precompute_from_cache = PrecomputeTable::create_precomputable_from_cache(cache_file)
@@ -416,11 +423,14 @@ mod tests {
         let modulo = ek.nn();
 
         // Create original precomputed table
-        let original_table = PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
+        let original_table =
+            PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
 
         // Save to file
         let file_path = "./test_precompute_cache_128b.json";
-        original_table.save_to_file(file_path).expect("Failed to save precompute table");
+        original_table
+            .save_to_file(file_path)
+            .expect("Failed to save precompute table");
 
         // Load from cache
         let loaded_table = PrecomputeTable::create_precomputable_from_cache(file_path)
@@ -432,17 +442,25 @@ mod tests {
         assert_eq!(loaded_table.modulo(), original_table.modulo());
 
         // Test encryption with both tables to ensure they work identically
-        let m = BigInt::from_str_radix("111059274584159037583180965985692333558976830674721111613492917082463480024962", 10).unwrap();
-        
+        let m = BigInt::from_str_radix(
+            "111059274584159037583180965985692333558976830674721111613492917082463480024962",
+            10,
+        )
+        .unwrap();
+
         let nonce = BigInt::from_str_radix("732911689077094917999787732601118729924686733015193458539990169234477127978464338825354892655278585155537516557769235739954124478537329253285352393161441319040527464989833650900813612317291614016820769918608864588447830727663698667276981015583782428638674608110906172846041743849706908674894268808957599160695894880678641020681120420307794343393663883455984248934660951479027113477434933717691697562736195421737448116960843913497260990794282692328492916970158483349212074979614140086448273259255458268094655659562968717410590324423497913466681423184603334547584840708993477598503171642794974497695371458965349658228326124990026575854751535042077203015958360890648644948508165178401055260956666281379901886465348203008540752783512657707562180780281579929836897680231953866381448813530290234243169259803919341862987736482304289550909705789843571414138322049868614029322459377247517682094132011467809075571455959204466107826486", 10).unwrap();
         let mut rng = rand::thread_rng();
-        
-        let c1 = ek.encrypt_with_precompute_table(&mut rng, &original_table, &m, Some(&nonce)).unwrap();
-        let c2 = ek.encrypt_with_precompute_table(&mut rng, &loaded_table, &m, Some(&nonce)).unwrap();
-        
+
+        let c1 = ek
+            .encrypt_with_precompute_table(&mut rng, &original_table, &m, Some(&nonce))
+            .unwrap();
+        let c2 = ek
+            .encrypt_with_precompute_table(&mut rng, &loaded_table, &m, Some(&nonce))
+            .unwrap();
+
         let recovered_m1 = dk.decrypt(&c1).unwrap();
         let recovered_m2 = dk.decrypt(&c2).unwrap();
-        
+
         assert_eq!(recovered_m1, m);
         assert_eq!(recovered_m2, m);
 
@@ -461,11 +479,12 @@ mod tests {
         let modulo = ek.nn();
 
         // Create precomputed table
-        let precompute_table = PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
+        let precompute_table =
+            PrecomputeTable::new_dp(base.clone(), block_size, pow_size, modulo.clone());
 
         // Test message
         let m = BigInt::from_str_radix("1", 10).unwrap();
-        
+
         let nonce = BigInt::from_str_radix("732911689077094917999787732601118729924686733015193458539990169234477127978464338825354892655278585155537516557769235739954124478537329253285352393161441319040527464989833650900813612317291614016820769918608864588447830727663698667276981015583782428638674608110906172846041743849706908674894268808957599160695894880678641020681120420307794343393663883455984248934660951479027113477434933717691697562736195421737448116960843913497260990794282692328492916970158483349212074979614140086448273259255458268094655659562968717410590324423497913466681423184603334547584840708993477598503171642794974497695371458965349658228326124990026575854751535042077203015958360890648644948508165178401055260956666281379901886465348203008540752783512657707562180780281579929836897680231953866381448813530290234243169259803919341862987736482304289550909705789843571414138322049868614029322459377247517682094132011467809075571455959204466107826486", 10).unwrap();
         // Generate a specific nonce
         let mut rng = rand::thread_rng();
@@ -475,7 +494,9 @@ mod tests {
         let c1 = dk.encrypt_with(&m, &nonce).unwrap();
 
         // Encrypt with precompute table using the same nonce
-        let c2 = ek.encrypt_with_precompute_table(&mut rng, &precompute_table, &m, Some(&nonce)).unwrap();
+        let c2 = ek
+            .encrypt_with_precompute_table(&mut rng, &precompute_table, &m, Some(&nonce))
+            .unwrap();
 
         // Both ciphertexts should be identical since they use the same nonce
 
@@ -483,13 +504,12 @@ mod tests {
         println!("c2: {:?}", c2);
         println!("nn: {:?}", ek.nn());
 
-
         // assert_eq!(c1, c2, "Ciphertexts should be identical when using the same nonce");
 
         // Verify both decrypt to the same message
         let recovered_m1 = dk.decrypt(&c2).unwrap();
         let recovered_m2 = dk.decrypt(&c1).unwrap();
-        
+
         assert_eq!(recovered_m1, m);
         assert_eq!(recovered_m2, m);
         assert_eq!(recovered_m1, recovered_m2);

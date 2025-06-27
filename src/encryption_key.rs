@@ -279,17 +279,29 @@ impl EncryptionKey {
             None => &utils::sample_with_size(rng, self.nounce_size()),
         };
         println!("nonce: {:?}, r: {:?}", nonce, r);
-        assert_eq!(precompute_table.pow_size(), r.bits() as usize, "nonce size is not correct");
+        assert_eq!(
+            precompute_table.pow_size(),
+            r.bits() as usize,
+            "nonce size is not correct"
+        );
 
         // h_pow_rn = (h^n)^r = h^(n*r) mod n^2
         let h_pow_rn = Self::pow(precompute_table, &r);
 
-        assert_eq!(self.h_pow_n().modpow_ext(&r, self.nn()).unwrap(), h_pow_rn, "h_pow_rn is not correct");
+        assert_eq!(
+            self.h_pow_n().modpow_ext(&r, self.nn()).unwrap(),
+            h_pow_rn,
+            "h_pow_rn is not correct"
+        );
 
         // g_pow_m = g^m = (1 + n) ^ m = (1 + n * m) mod n^2
         let g_pow_m = ((m * &self.n) + BigInt::from(1)).mod_floor(&self.nn);
 
-        assert_eq!(g_pow_m, (BigInt::from(1) + (m * &self.n)).mod_floor(&self.nn), "g_pow_m is not correct");
+        assert_eq!(
+            g_pow_m,
+            (BigInt::from(1) + (m * &self.n)).mod_floor(&self.nn),
+            "g_pow_m is not correct"
+        );
 
         let c = (g_pow_m * h_pow_rn).mod_floor(&self.nn);
         assert!(
