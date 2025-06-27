@@ -1,10 +1,8 @@
-use rug::Integer;
+use crate::{DecryptionKey, EncryptionKey, Error, Reason};
+use num_bigint::BigInt;
+use num_traits::Num;
 use serde::de::{self};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-#[cfg(feature = "serde")]
-use serde_json;
-
-use crate::{DecryptionKey, EncryptionKey, Error, Reason};
 
 // Serializable representation of EncryptionKey
 #[derive(Serialize, Deserialize)]
@@ -29,14 +27,14 @@ struct SerializableDecryptionKey {
     alpha: String,
 }
 
-// Convert Integer to hex string
-fn integer_to_hex(value: &Integer) -> String {
+// Convert BigInt to hex string
+fn integer_to_hex(value: &BigInt) -> String {
     format!("{:x}", value)
 }
 
-// Convert hex string to Integer
-fn hex_to_integer(hex: &str) -> Result<Integer, Error> {
-    Integer::from_str_radix(hex, 16).map_err(|_| Error::from(Reason::Ops))
+// Convert hex string to BigInt
+fn hex_to_integer(hex: &str) -> Result<BigInt, Error> {
+    BigInt::from_str_radix(hex, 16).map_err(|_| Error::from(Reason::Ops))
 }
 
 impl Serialize for EncryptionKey {
@@ -151,7 +149,6 @@ impl DecryptionKey {
 
 #[cfg(test)]
 mod tests {
-    use rug::Complete;
 
     use super::*;
     use crate::{AnyEncryptionKey, DecryptionKey};
@@ -211,8 +208,8 @@ mod tests {
         assert_eq!(ek.n_size(), 3072);
         assert_eq!(ek.a_size(), 512);
         assert_eq!(ek.nounce_size(), 512);
-        assert_eq!((ek.half_n() + ek.neg_half_n()).complete(), Integer::ZERO);
-        assert_eq!(&(ek.n() * ek.n()).complete(), ek.nn());
+        assert_eq!(ek.half_n() + ek.neg_half_n(), BigInt::from(0));
+        assert_eq!(&(ek.n() * ek.n()), ek.nn());
     }
 
     #[test]
@@ -239,8 +236,8 @@ mod tests {
         assert_eq!(dk.n_size(), 3072);
         assert_eq!(dk.a_size(), 512);
         assert_eq!(dk.nounce_size(), 512);
-        assert_eq!(&(dk.p() * dk.q()).complete(), dk.n());
-        assert_eq!((dk.half_n() + dk.neg_half_n()).complete(), Integer::ZERO);
-        assert_eq!(&(dk.n() * dk.n()).complete(), dk.nn());
+        assert_eq!(&(dk.p() * dk.q()), dk.n());
+        assert_eq!(dk.half_n() + dk.neg_half_n(), BigInt::from(0));
+        assert_eq!(&(dk.n() * dk.n()), dk.nn());
     }
 }
