@@ -102,47 +102,47 @@ impl EncryptionKey {
     }
 
     /// Returns `n_size`
-    pub(crate) fn n_size(&self) -> u32 {
+    pub fn n_size(&self) -> u32 {
         self.n_size
     }
 
     /// Returns `a_size`
-    pub(crate) fn a_size(&self) -> u32 {
+    pub fn a_size(&self) -> u32 {
         self.a_size
     }
 
     /// Returns `nounce_size`
-    pub(crate) fn nounce_size(&self) -> u32 {
+    pub fn nounce_size(&self) -> u32 {
         self.nounce_size
     }
 
     /// Returns `h`
-    pub(crate) fn h(&self) -> &BigInt {
+    pub fn h(&self) -> &BigInt {
         &self.h
     }
 
     /// Returns `N`
-    pub(crate) fn n(&self) -> &BigInt {
+    pub fn n(&self) -> &BigInt {
         &self.n
     }
 
     /// Returns `N^2`
-    pub(crate) fn nn(&self) -> &BigInt {
+    pub fn nn(&self) -> &BigInt {
         &self.nn
     }
 
     /// Returns `h^N mod N^2`
-    pub(crate) fn h_pow_n(&self) -> &BigInt {
+    pub fn h_pow_n(&self) -> &BigInt {
         &self.h_pow_n
     }
 
     /// Returns `N/2`
-    pub(crate) fn half_n(&self) -> &BigInt {
+    pub fn half_n(&self) -> &BigInt {
         &self.half_n
     }
 
     /// Returns `-N/2`
-    pub(crate) fn neg_half_n(&self) -> &BigInt {
+    pub fn neg_half_n(&self) -> &BigInt {
         &self.neg_half_n
     }
 }
@@ -165,12 +165,15 @@ impl EncryptionKey {
     /// Returns error if inputs are not in specified range
     pub fn encrypt_with(&self, x: &Plaintext, nonce: &Nonce) -> Result<Ciphertext, Error> {
         // Check plaintext is in signed group
+
+        // assert_eq!(self.nounce_size(), nonce.bits() as u32, "nonce size is not correct");
+
         if !self.in_signed_group(x) {
             return Err(Reason::Encrypt.into());
         }
 
         // Make x positive
-        let x = if *x < BigInt::ZERO {
+        let x = if *x > BigInt::ZERO {
             x.clone()
         } else {
             x + self.n()
@@ -179,7 +182,7 @@ impl EncryptionKey {
         // a = (1 + N)^x mod N^2 = (1 + xN) mod N^2
         let a = (BigInt::one() + (&x * self.n())).mod_floor(self.nn());
         // b = (h^nonce mod N)^N mod N^2 = (h^n mod N^2)^nonce mod N^2 = h_pow_n^nonce mod N^2
-        let b = self
+        let b: BigInt = self
             .h_pow_n()
             .clone()
             .modpow_ext(nonce, self.nn())
@@ -269,15 +272,31 @@ impl EncryptionKey {
         rng: &mut (impl RngCore + CryptoRng),
         precompute_table: &PrecomputeTable,
         m: &Plaintext,
+        nonce: Option<&Nonce>,
     ) -> Result<Ciphertext, Error> {
-        let r = utils::sample_with_size(rng, self.nounce_size());
+        let r = match nonce {
+            Some(nonce) => nonce,
+            None => &utils::sample_with_size(rng, self.nounce_size()),
+        };
+        println!("nonce: {:?}, r: {:?}", nonce, r);
+        assert_eq!(precompute_table.pow_size(), r.bits() as usize, "nonce size is not correct");
+
         // h_pow_rn = (h^n)^r = h^(n*r) mod n^2
         let h_pow_rn = Self::pow(precompute_table, &r);
+
+        assert_eq!(self.h_pow_n().modpow_ext(&r, self.nn()).unwrap(), h_pow_rn, "h_pow_rn is not correct");
 
         // g_pow_m = g^m = (1 + n) ^ m = (1 + n * m) mod n^2
         let g_pow_m = ((m * &self.n) + BigInt::from(1)).mod_floor(&self.nn);
 
+        assert_eq!(g_pow_m, (BigInt::from(1) + (m * &self.n)).mod_floor(&self.nn), "g_pow_m is not correct");
+
         let c = (g_pow_m * h_pow_rn).mod_floor(&self.nn);
+        assert!(
+            utils::in_mult_group(&c, self.nn()),
+            "Ciphertext is not in the multiplicative group"
+        );
+
         Ok(c)
     }
 
@@ -290,7 +309,7 @@ impl EncryptionKey {
                 .mod_floor(precompute_table.modulo());
         }
 
-        result
+        result.mod_floor(precompute_table.modulo())
     }
 
     fn convert_into_blocks(precompute_table: &PrecomputeTable, x: &BigInt) -> Vec<usize> {

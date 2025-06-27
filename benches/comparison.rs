@@ -43,7 +43,7 @@ fn encryption(c: &mut criterion::Criterion) {
         b.iter_batched(
             &mut precompute_inputs,
             |x| {
-                ek.encrypt_with_precompute_table(&mut bench_rng, &table, &x)
+                ek.encrypt_with_precompute_table(&mut bench_rng, &table, &x, None)
                     .unwrap()
             },
             criterion::BatchSize::SmallInput,

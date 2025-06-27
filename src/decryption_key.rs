@@ -176,6 +176,78 @@ impl DecryptionKey {
         Ok(Self { ek, p, q, alpha })
     }
 
+    /// Tries to generate a paillier key with a single attempt (no loops)
+    /// Returns None if generation fails, Some(key) if successful
+    /// The caller should handle looping if multiple attempts are needed
+    pub fn try_generate(
+        rng: &mut (impl RngCore + CryptoRng),
+        n_size: u32,
+        a_size: u32,
+    ) -> Option<Self> {
+        // Step 1: generate div_p, div_q, other_div_p, other_div_q
+        // let div_p, div_q are (a_size/2)-bit odd PRIMES
+        // let other_div_p, other_div_q are ((n_size - a_size)/2 - 1)-bit odd INTEGERS
+
+        let div_p = utils::generate_safe_prime(rng, a_size / 2);
+        let div_q = utils::generate_safe_prime(rng, a_size / 2);
+        
+        // Basic assertions for generated primes
+        if div_p.bits() != a_size as u64 / 2 || div_q.bits() != a_size as u64 / 2 {
+            return None;
+        }
+        if !utils::is_prime(&div_p) || !utils::is_prime(&div_q) {
+            return None;
+        }
+
+        let other_bit_length = (n_size - a_size) / 2 - 1;
+
+        let other_div_p = utils::sample_odd_with_size(rng, other_bit_length);
+        let other_div_q = utils::sample_odd_with_size(rng, other_bit_length);
+        
+        // Check basic properties
+        if !other_div_p.is_odd() || !other_div_q.is_odd() {
+            return None;
+        }
+        if other_div_p.bits() != other_bit_length as u64 || other_div_q.bits() != other_bit_length as u64 {
+            return None;
+        }
+
+        // Step 2: calculate p, q
+        // p = 2 * div_p * other_div_p + 1
+        // q = 2 * div_q * other_div_q + 1
+        let p: BigInt = BigInt::from(2) * &div_p * &other_div_p + 1;
+        let q: BigInt = BigInt::from(2) * &div_q * &other_div_q + 1;
+
+        // Step 3: validate
+
+        // validate div_p, div_q, other_div_p, other_div_q are COPRIME
+        if !utils::check_coprime(&[&div_p, &div_q, &other_div_p, &other_div_q]) {
+            return None;
+        }
+
+        // p, q are PRIMES
+        if !utils::is_prime(&p) || !utils::is_prime(&q) {
+            return None;
+        }
+
+        // Step 4: calculate alpha = div_p * div_q
+        // n = p * q
+        let alpha = div_p * div_q;
+        let n = p.clone() * &q;
+
+        // h = -y^(2*beta) mod n
+        // where beta = (p - 1)(q - 1)/(4.alpha)
+        // y is a random element of Z*_N
+
+        let beta: BigInt = (p.clone() - 1) * (q.clone() - 1) / (BigInt::from(4) * &alpha);
+        let y = utils::sample_in_mult_group(rng, &n);
+        let h = -y.modpow_ext(&(BigInt::from(2) * &beta), &n)?;
+
+        let ek = EncryptionKey::new(n_size, a_size, h, n).ok()?;
+
+        Some(Self { ek, p, q, alpha })
+    }
+
     /// Return a decryption key from the encryption key, p, q, alpha
     pub fn new(ek: EncryptionKey, p: BigInt, q: BigInt, alpha: BigInt) -> Result<Self, Error> {
         // TODO: validate ek, p, q, alpha are valid
