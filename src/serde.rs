@@ -1,11 +1,10 @@
-
+use malachite::Integer;
+use malachite_base::num::conversion::traits::FromStringBase;
+use malachite_base::num::conversion::traits::ToStringBase;
 use serde::de::{self};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(feature = "serde")]
 use serde_json;
-use malachite::Integer;
-use malachite_base::num::conversion::traits::FromStringBase;
-use malachite_base::num::conversion::traits::ToStringBase;
 
 use crate::{DecryptionKey, EncryptionKey, Error, Reason};
 
@@ -154,9 +153,9 @@ impl DecryptionKey {
 
 #[cfg(test)]
 mod tests {
-    use malachite_base::num::basic::traits::Zero;
     use super::*;
     use crate::{AnyEncryptionKey, DecryptionKey};
+    use malachite_base::num::basic::traits::Zero;
 
     #[test]
     fn test_encryption_key_serialization() {

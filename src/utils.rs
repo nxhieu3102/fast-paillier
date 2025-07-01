@@ -1,12 +1,12 @@
 //! Utilities for random sampling, primality checks, coprimality checks and
 //! misc helpers, implemented with `malachite` instead of `rug`.
 
-use rand_core::RngCore;
 use malachite::Integer;
 use malachite_base::num::arithmetic::traits::{Gcd, Parity};
-use malachite_base::num::logic::traits::SignificantBits;
-use malachite_base::num::basic::traits::{Zero, One};
+use malachite_base::num::basic::traits::{One, Zero};
 use malachite_base::num::logic::traits::BitAccess;
+use malachite_base::num::logic::traits::SignificantBits;
+use rand_core::RngCore;
 mod serde_wrapper;
 pub use serde_wrapper::*;
 /// Returns `true` iff `x` (taken modulo `n`) is in the multiplicative group
@@ -39,8 +39,7 @@ pub struct CrtExp {
 /// value is taken).
 #[inline]
 pub fn in_mult_group_abs(x: &Integer, n: &Integer) -> bool {
-    x
-        .unsigned_abs_ref()
+    x.unsigned_abs_ref()
         .gcd(n.unsigned_abs_ref())
         .significant_bits()
         == 1 // gcd == 1
@@ -206,5 +205,3 @@ pub fn generate_safe_prime(rng: &mut impl RngCore, bits: u32) -> Integer {
 pub fn sieve_generate_safe_primes(rng: &mut impl RngCore, bits: u32, _amount: usize) -> Integer {
     generate_safe_prime(rng, bits)
 }
-
-

@@ -1,12 +1,12 @@
 // TODO: update integration test
 
 use fast_paillier::AnyEncryptionKey;
-use fast_paillier::{DecryptionKey};
-use rand::{CryptoRng, RngCore};
+use fast_paillier::DecryptionKey;
 use malachite::Integer;
-use malachite_nz::integer::random::get_uniform_random_integer_from_inclusive_range;
 use malachite_base::num::random::random_primitive_ints;
 use malachite_base::random::EXAMPLE_SEED;
+use malachite_nz::integer::random::get_uniform_random_integer_from_inclusive_range;
+use rand::{CryptoRng, RngCore};
 
 #[test]
 fn encrypt_decrypt() {
@@ -65,7 +65,7 @@ fn encrypt_decrypt() {
 //     let lower_bound = -(ek.n() / Integer::from(2));
 //     let upper_bound = (ek.n() / Integer::from(2));
 
-//     let cases = [   
+//     let cases = [
 //         lower_bound.clone() - Integer::from(1),
 //         lower_bound.clone() - Integer::from(2),
 //         upper_bound.clone() + Integer::from(1),

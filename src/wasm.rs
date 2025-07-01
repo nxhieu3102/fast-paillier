@@ -1,7 +1,7 @@
-use wasm_bindgen::prelude::*;
 use malachite::Integer;
 use malachite_base::num::conversion::traits::FromStringBase;
 use malachite_base::num::logic::traits::SignificantBits;
+use wasm_bindgen::prelude::*;
 
 use crate::{DecryptionKey, EncryptionKey, Plaintext};
 
@@ -76,4 +76,4 @@ impl PaillierWasm {
     pub fn n_bits(&self) -> u32 {
         self.dk.n().significant_bits() as u32
     }
-} 
+}

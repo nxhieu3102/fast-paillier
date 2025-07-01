@@ -1,13 +1,13 @@
-use rand_core::{CryptoRng, RngCore};
 use malachite::Integer;
-use malachite_base::num::arithmetic::traits::{Parity};
-use malachite_base::num::logic::traits::SignificantBits;
-use malachite_base::num::basic::traits::{Zero, One};
+use malachite_base::num::arithmetic::traits::Parity;
+use malachite_base::num::basic::traits::{One, Zero};
 use malachite_base::num::conversion::traits::FromStringBase;
+use malachite_base::num::logic::traits::SignificantBits;
+use rand_core::{CryptoRng, RngCore};
 
+use crate::integer_ext::{mod_inverse_int, mod_pow_int};
 use crate::{utils, AnyEncryptionKey, Bug, Ciphertext, EncryptionKey, Nonce, Plaintext};
 use crate::{Error, Reason};
-use crate::integer_ext::{mod_inverse_int, mod_pow_int};
 
 /// Paillier decryption key
 #[derive(Clone, Debug)]
@@ -228,8 +228,8 @@ impl DecryptionKey {
         let l = (u - Integer::from(1)) / self.n();
 
         // (2 * alpha)^{-1} mod N
-        let two_alpha_inv = mod_inverse_int(&two_alpha, self.n())
-            .ok_or(Error(Reason::Bug(Bug::InvertUndef)))?;
+        let two_alpha_inv =
+            mod_inverse_int(&two_alpha, self.n()).ok_or(Error(Reason::Bug(Bug::InvertUndef)))?;
 
         // plaintext = L(c^(2*alpha) mod N^2, N) * (2*alpha)^{-1} mod N
         let plaintext = l * &two_alpha_inv % self.n();

@@ -1,12 +1,12 @@
 use crate::precomputed_table::PrecomputeTable;
 use crate::{utils, Ciphertext, Nonce, Plaintext};
 use crate::{Bug, Error, Reason};
-use rand_core::{CryptoRng, RngCore};
 use malachite::Integer;
-use malachite_base::num::arithmetic::traits::{ModPow, Mod, ModInverse};
 use malachite_base::num::arithmetic::mod_pow;
+use malachite_base::num::arithmetic::traits::{Mod, ModInverse, ModPow};
 use malachite_base::num::conversion::traits::FromStringBase;
 use malachite_base::num::logic::traits::BitAccess;
+use rand_core::{CryptoRng, RngCore};
 /// Paillier encryption key
 #[derive(Clone, Debug)]
 pub struct EncryptionKey {
@@ -156,11 +156,7 @@ impl EncryptionKey {
         }
 
         // Make x positive
-        let x = if *x >= 0 {
-            x.clone()
-        } else {
-            x + self.n()
-        };
+        let x = if *x >= 0 { x.clone() } else { x + self.n() };
 
         // a = (1 + N)^x mod N^2 = (1 + xN) mod N^2
         let a = (Integer::from(1) + (&x * self.n())) % self.nn();
@@ -225,7 +221,11 @@ impl EncryptionKey {
             return Err(Reason::Ops.into());
         }
 
-        Ok(crate::integer_ext::mod_pow_int(ciphertext, scalar, self.nn()))
+        Ok(crate::integer_ext::mod_pow_int(
+            ciphertext,
+            scalar,
+            self.nn(),
+        ))
     }
 
     /// Homomorphic negation of a ciphertext
@@ -234,7 +234,7 @@ impl EncryptionKey {
     /// oneg(Enc(a)) = Enc(-a)
     /// ```
     pub fn oneg(&self, ciphertext: &Ciphertext) -> Result<Ciphertext, Error> {
-        Ok(crate::integer_ext::mod_inverse_int(ciphertext, self.nn()).ok_or(Reason::Ops)? )
+        Ok(crate::integer_ext::mod_inverse_int(ciphertext, self.nn()).ok_or(Reason::Ops)?)
     }
 }
 
@@ -262,8 +262,8 @@ impl EncryptionKey {
         let mut result = Integer::from(1);
 
         for (id, pow_block) in pow_blocks.iter().enumerate() {
-            result = (result * &precompute_table.table()[id][*pow_block])
-                % precompute_table.modulo();
+            result =
+                (result * &precompute_table.table()[id][*pow_block]) % precompute_table.modulo();
         }
 
         result

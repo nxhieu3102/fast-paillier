@@ -1,10 +1,10 @@
 /// Serialize a BigInt to a JSON object with radix and value
 pub mod serializable_bigint {
     use malachite::Integer;
-    use serde::de::Error;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use malachite_base::num::conversion::traits::FromStringBase;
     use malachite_base::num::conversion::traits::ToStringBase;
+    use serde::de::Error;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     #[derive(Serialize, Deserialize)]
     struct BigIntFormat {
         radix: u32,
@@ -29,17 +29,18 @@ pub mod serializable_bigint {
         D: Deserializer<'de>,
     {
         let format = BigIntFormat::deserialize(deserializer)?;
-        Integer::from_string_base(format.radix as u8, &format.value).ok_or(Error::custom("Invalid integer format"))
+        Integer::from_string_base(format.radix as u8, &format.value)
+            .ok_or(Error::custom("Invalid integer format"))
     }
 }
 
 /// Serialize a vector of BigInts to a string
 pub mod serializable_vec_bigint {
     use malachite::Integer;
-    use serde::de::Error;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use malachite_base::num::conversion::traits::FromStringBase;
     use malachite_base::num::conversion::traits::ToStringBase;
+    use serde::de::Error;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     #[derive(Serialize, Deserialize)]
     struct VecBigIntFormat {
         radix: u32,
@@ -71,16 +72,19 @@ pub mod serializable_vec_bigint {
         format
             .value
             .split(",")
-            .map(|x| Integer::from_string_base(format.radix as u8, x).ok_or(Error::custom("Invalid integer format")))
+            .map(|x| {
+                Integer::from_string_base(format.radix as u8, x)
+                    .ok_or(Error::custom("Invalid integer format"))
+            })
             .collect::<Result<Vec<Integer>, D::Error>>()
     }
 }
 
 /// Serialize a vector of vectors of BigInts to a string
 pub mod serializable_vec_vec_bigint {
+    use malachite::Integer;
     use malachite_base::num::conversion::traits::FromStringBase;
     use malachite_base::num::conversion::traits::ToStringBase;
-    use malachite::Integer;
     use serde::de::Error;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -122,7 +126,10 @@ pub mod serializable_vec_vec_bigint {
             .split(";")
             .map(|x| {
                 x.split(",")
-                    .map(|y| Integer::from_string_base(format.radix as u8, y).ok_or(Error::custom("Invalid integer format")))
+                    .map(|y| {
+                        Integer::from_string_base(format.radix as u8, y)
+                            .ok_or(Error::custom("Invalid integer format"))
+                    })
                     .collect::<Result<Vec<Integer>, D::Error>>()
             })
             .collect::<Result<Vec<Vec<Integer>>, D::Error>>()
@@ -132,11 +139,11 @@ pub mod serializable_vec_vec_bigint {
 /// Serialize a array of BigInts to a string
 pub mod serializable_array_bigint {
     use malachite::Integer;
+    use malachite_base::num::basic::traits::Zero;
     use malachite_base::num::conversion::traits::FromStringBase;
     use malachite_base::num::conversion::traits::ToStringBase;
     use serde::de::Error;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use malachite_base::num::basic::traits::Zero;
     #[derive(Serialize, Deserialize)]
     struct ArrayBigIntFormat {
         radix: u32,
@@ -171,7 +178,10 @@ pub mod serializable_array_bigint {
         let values = format
             .value
             .split(",")
-            .map(|x| Integer::from_string_base(format.radix as u8, x).ok_or(Error::custom("Invalid integer format")))
+            .map(|x| {
+                Integer::from_string_base(format.radix as u8, x)
+                    .ok_or(Error::custom("Invalid integer format"))
+            })
             .collect::<Result<Vec<Integer>, D::Error>>()?;
         if values.len() != N {
             return Err(D::Error::custom(format!(

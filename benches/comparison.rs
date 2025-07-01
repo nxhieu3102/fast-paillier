@@ -148,11 +148,5 @@ fn safe_primes(c: &mut criterion::Criterion) {
     }
 }
 
-criterion::criterion_group!(
-    benches,
-    encryption,
-    decryption,
-    omul,
-    safe_primes
-);
+criterion::criterion_group!(benches, encryption, decryption, omul, safe_primes);
 criterion::criterion_main!(benches);

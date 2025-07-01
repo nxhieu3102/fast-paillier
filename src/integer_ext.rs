@@ -22,7 +22,5 @@ pub(crate) fn mod_pow_int(base: &Integer, exp: &Integer, m: &Integer) -> Integer
 /// Returns `None` when the inverse does not exist.
 pub(crate) fn mod_inverse_int(a: &Integer, m: &Integer) -> Option<Integer> {
     let a_red = a.mod_op(m).unsigned_abs();
-    a_red
-        .mod_inverse(m.unsigned_abs_ref())
-        .map(Integer::from)
-} 
+    a_red.mod_inverse(m.unsigned_abs_ref()).map(Integer::from)
+}
