@@ -1,6 +1,7 @@
 use fast_paillier::utils;
 use fast_paillier::AnyEncryptionKey;
-use rug::Integer;
+use malachite::Integer;
+use malachite_base::num::logic::traits::SignificantBits;
 
 fn encryption(c: &mut criterion::Criterion) {
     let mut rng = rand_dev::DevRng::new();
@@ -16,11 +17,10 @@ fn encryption(c: &mut criterion::Criterion) {
     let mut group = c.benchmark_group("Encrypt");
 
     let mut generate_inputs = || {
-        let x = ek
-            .n()
-            .clone()
-            .random_below(&mut fast_paillier::utils::external_rand(&mut rng))
-            - ek.half_n();
+        let bits = ek.n_size();
+        // Generate a random plaintext uniformly in (-N/2, N/2)
+        let x_unsigned = utils::sample_with_size(&mut rng, bits) % ek.n();
+        let x = x_unsigned - ek.half_n();
         let nonce = fast_paillier::utils::sample_in_mult_group(&mut rng, ek.n());
         (x, nonce)
     };
@@ -35,12 +35,9 @@ fn encryption(c: &mut criterion::Criterion) {
 
     let mut fresh_rng = rand_dev::DevRng::new();
     let mut precompute_inputs = || {
-        let x = ek
-            .n()
-            .clone()
-            .random_below(&mut fast_paillier::utils::external_rand(&mut fresh_rng))
-            - ek.half_n();
-        x
+        let bits = ek.n_size();
+        let x_unsigned = utils::sample_with_size(&mut fresh_rng, bits) % ek.n();
+        x_unsigned - ek.half_n()
     };
 
     group.bench_function("Encrypt with precompute table", |b| {
@@ -83,10 +80,8 @@ fn omul(c: &mut criterion::Criterion) {
     let mut group = c.benchmark_group("OMul");
 
     let mut generate_inputs = || {
-        let scalar = ek
-            .nn()
-            .random_below_ref(&mut utils::external_rand(&mut rng))
-            .into();
+        let scalar_bits = ek.nn().significant_bits() as u32;
+        let scalar = utils::sample_with_size(&mut rng, scalar_bits) % ek.nn();
         let enc_x = utils::sample_in_mult_group(&mut rng, ek.nn());
         (scalar, enc_x)
     };
@@ -107,20 +102,22 @@ fn omul(c: &mut criterion::Criterion) {
     });
 }
 
-/// Old implementation of safe primes
+/// Naive safe-prime generation using utilities built on `malachite`.
+/// This mirrors the older `rug` implementation but relies on the portable
+/// helpers from `fast_paillier::utils`.
 pub fn naive_safe_prime(rng: &mut impl rand_core::RngCore, bits: u32) -> Integer {
-    use rug::{integer::IsPrime, Assign};
-    let mut rng = utils::external_rand(rng);
-    let mut x = Integer::new();
     loop {
-        x.assign(Integer::random_bits(bits - 1, &mut rng));
-        x.set_bit(bits - 2, true);
-        x.next_prime_mut();
-        x <<= 1;
-        x += 1;
+        // Generate an odd candidate `q` with `bits-1` bits.
+        let q = utils::sample_odd_with_size(rng, bits - 1);
 
-        if let IsPrime::Yes | IsPrime::Probably = x.is_probably_prime(25) {
-            return x;
+        if !utils::is_prime(&q) {
+            continue;
+        }
+
+        // p = 2q + 1 should also be prime.
+        let p = Integer::from(2u32) * &q + Integer::from(1u32);
+        if utils::is_prime(&p) {
+            return p;
         }
     }
 }
@@ -151,31 +148,11 @@ fn safe_primes(c: &mut criterion::Criterion) {
     }
 }
 
-fn rng_covertion(c: &mut criterion::Criterion) {
-    let mut rng = rand_dev::DevRng::new();
-
-    let mut group = c.benchmark_group("PRNG convertion");
-
-    group.bench_function("into GMP", |b| {
-        b.iter(|| {
-            let mut gmp_rng = fast_paillier::utils::external_rand(std::hint::black_box(&mut rng));
-            let dyn_rng: &mut dyn rug::rand::MutRandState = &mut gmp_rng;
-            let _ = std::hint::black_box(dyn_rng);
-        })
-    });
-}
-
 criterion::criterion_group!(
     benches,
     encryption,
     decryption,
     omul,
-    safe_primes,
-    rng_covertion
+    safe_primes
 );
 criterion::criterion_main!(benches);
-
-fn convert_integer_to_unknown_order(x: &Integer) -> libpaillier::unknown_order::BigNumber {
-    let bytes = x.to_digits::<u8>(rug::integer::Order::Msf);
-    libpaillier::unknown_order::BigNumber::from_slice(&bytes)
-}

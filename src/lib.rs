@@ -10,13 +10,18 @@ pub mod precomputed_table;
 /// Utility functions for the Paillier cryptosystem
 pub mod utils;
 
+/// Module for WebAssembly functionality
+pub mod wasm;
+
 #[cfg(feature = "serde")]
 mod serde;
 
 use std::fmt;
 
 use rand_core::{CryptoRng, RngCore};
-use rug::Integer;
+pub(crate) mod integer_ext;
+
+use malachite::Integer;
 
 /// Paillier ciphertext
 pub type Ciphertext = Integer;
@@ -299,7 +304,8 @@ impl fmt::Debug for dyn AnyEncryptionKey + '_ {
 #[cfg(test)]
 mod tests {
     use crate::{decryption_key::DecryptionKey, utils};
-    use rug::Integer;
+    use malachite::Integer;
+    use malachite_base::num::logic::traits::SignificantBits;
 
     #[test]
     fn test_enc_dec() {
@@ -315,7 +321,7 @@ mod tests {
                 assert_eq!(decrypted, plaintext);
                 assert!(ek.in_signed_group(&decrypted));
                 assert!(utils::in_mult_group(&decrypted, ek.nn()));
-                assert_eq!(ek.nounce_size(), nonce.significant_bits());
+                assert_eq!(ek.nounce_size() as u64, nonce.significant_bits());
             }
             Err(_) => {
                 panic!("Decryption failed");
@@ -323,3 +329,5 @@ mod tests {
         }
     }
 }
+
+

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fast-Paillier WASM Demo</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <h1>Fast-Paillier WASM Demo</h1>
+
+    <section id="info">
+        <p>Modulus size: <span id="n-bits">…</span> bits</p>
+    </section>
+
+    <section id="encrypt-section">
+        <h2>Encrypt</h2>
+        <input id="plaintext-input" type="text" placeholder="Enter integer…" />
+        <button id="encrypt-btn">Encrypt</button>
+        <p>Ciphertext:</p>
+        <textarea id="ciphertext-output" readonly rows="3"></textarea>
+    </section>
+
+    <section id="decrypt-section">
+        <h2>Decrypt</h2>
+        <textarea id="ciphertext-input" rows="3" placeholder="Paste ciphertext…"></textarea>
+        <button id="decrypt-btn">Decrypt</button>
+        <p>Plaintext: <span id="plaintext-output"></span></p>
+    </section>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>

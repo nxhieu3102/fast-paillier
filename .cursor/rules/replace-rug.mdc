@@ -1,0 +1,60 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+## Purpose
+---
+description: "Migration helper for replacing the `rug` crate with an alternate big-integer implementation"
+globs:
+  - "**/*.rs"
+alwaysApply: false
+---
+
+This rule guides the Agent through **systematic replacement of the `rug` crate** with a new big-integer library (for example `malachite-bigint`, `num-bigint`, or a custom internal crate).
+
+The workflow encoded below should be followed _per-file_ when a Rust source file that depends on `rug` is being refactored.  The steps ensure that every `rug`  API call is reviewed, replaced, and, if necessary, re-implemented while preserving correctness and ergonomics.
+
+## Workflow
+1. **Initial Analysis**
+   1. Scan the current buffer and list every occurrence of `use rug::` or fully-qualified `rug::` paths.
+   2. For each match, record:
+      * File path and line number
+      * The exact expression / type / trait being imported or invoked
+      * Whether it is a value-level call (function/method) or type-level reference (struct/enum/trait).
+   3. Produce a concise markdown table named **Rug Usages** summarising this information.
+
+2. **Determine Migration Target**
+   1. Inspect the `Cargo.toml` of the replacement library (provided or already present in the workspace).
+   2. Enumerate its public API (types, inherent impls, traits, free functions) relevant to big-integer arithmetic.
+   3. Build a lookup table that pairs each _Rug method_ found in step 1 with the _closest analogue_ in the new library.  If multiple candidates exist, choose the most idiomatic.
+
+3. **Automated Replacement**
+   1. For every pair with a direct analogue _and_ matching signature:
+      * Replace the import path and the call expression in-place.
+   2. If the analogue exists but the **parameters differ** (arity, ownership, mutability, error handling):
+      * Substitute the call with the new method **wrapped in a `TODO:` comment** explaining the mismatch.
+      * Provide skeleton-code showing how the arguments _could_ be adapted.  Do **not** leave the code uncompilable without an accompanying comment.
+   3. Where **no analogue** exists:
+      * Emit a helper function in `crate::compat::rug_shims` (create the module if it does not exist) implementing the required behaviour **fully**, using the new library's primitives.
+      * Add tests under `tests/rug_shims/` that cover edge-cases (zero, negative inputs, large values).
+
+4. **Summary Report**
+   After modifications, append (or create if absent) a markdown file:
+   `docs/migration/rug_to_<lib>.md` containing:
+   * The **Rug Usages** table from step 1
+   * The **Analogue Lookup** table from step 2
+   * A tick/❌ status column indicating whether each usage was completely migrated, partially migrated (needs manual follow-up), or shimmed.
+   * Links to any newly created shim functions and their tests.
+
+## Conventions & Notes
+- Keep replacements **idiomatic** to the target library; avoid implementing complex arithmetic manually when a built-in equivalent exists.
+- Helper shim functions **must**:
+  * Live under `crate::compat::rug_shims`.
+  * Be `pub(crate)` unless required externally.
+  * Include doc-comments that reference the original `rug` behaviour.
+- Always run `cargo test --all` after each file migration and include failing test output in chat if assistance is needed.
+- If at any step information is missing (e.g., target library is unclear), ask the user instead of guessing.
+
+## Trigger
+This rule is _Agent-Requested_.  Invoke it explicitly with `@replace-rug` or when opening a Rust file that imports the `rug` crate.

@@ -1,111 +1,184 @@
-//! Various utilities
-
-use std::fmt;
+//! Utilities for random sampling, primality checks, coprimality checks and
+//! misc helpers, implemented with `malachite` instead of `rug`.
 
 use rand_core::RngCore;
-use rug::{Assign, Complete, Integer};
+use malachite::Integer;
+use malachite_base::num::arithmetic::traits::{Gcd, Parity};
+use malachite_base::num::logic::traits::SignificantBits;
+use malachite_base::num::basic::traits::{Zero, One};
+use malachite_base::num::logic::traits::BitAccess;
+mod serde_wrapper;
+pub use serde_wrapper::*;
+/// Returns `true` iff `x` (taken modulo `n`) is in the multiplicative group
+/// `Z*_n` (i.e. `gcd(x, n) == 1`).
+#[inline]
+pub fn in_mult_group(x: &Integer, n: &Integer) -> bool {
+    x >= &Integer::ZERO && in_mult_group_abs(x, n)
+}
 
-mod small_primes;
+/// CrtExp is a struct that contains the CRT exponentiation parameters.
+/// It is used to speed up the CRT exponentiation.
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct CrtExp {
+    #[serde(with = "serializable_bigint")]
+    n: Integer,
+    #[serde(with = "serializable_bigint")]
+    n1: Integer,
+    #[serde(with = "serializable_bigint")]
+    phi_n1: Integer,
+    #[serde(with = "serializable_bigint")]
+    n2: Integer,
+    #[serde(with = "serializable_bigint")]
+    phi_n2: Integer,
+    #[serde(with = "serializable_bigint")]
+    beta: Integer,
+}
 
-/// Wraps any randomness source that implements [`rand_core::RngCore`] and makes
-/// it compatible with [`rug::rand`].
-pub fn external_rand(rng: &mut impl RngCore) -> rug::rand::ThreadRandState {
-    use bytemuck::TransparentWrapper;
+/// Same as [`in_mult_group`] but `x` is treated as an unsigned value (absolute
+/// value is taken).
+#[inline]
+pub fn in_mult_group_abs(x: &Integer, n: &Integer) -> bool {
+    x
+        .unsigned_abs_ref()
+        .gcd(n.unsigned_abs_ref())
+        .significant_bits()
+        == 1 // gcd == 1
+}
 
-    #[derive(TransparentWrapper)]
-    #[repr(transparent)]
-    pub struct ExternalRand<R>(R);
-
-    impl<R: RngCore> rug::rand::ThreadRandGen for ExternalRand<R> {
-        fn gen(&mut self) -> u32 {
-            self.0.next_u32()
+/// Generate a random positive `Integer` strictly less than `n`.
+fn random_below(rng: &mut impl RngCore, n: &Integer) -> Integer {
+    let bits = n.significant_bits();
+    loop {
+        let candidate = sample_with_size(rng, bits as u32) % n;
+        if candidate > 0 {
+            return candidate;
         }
     }
-
-    rug::rand::ThreadRandState::new_custom(ExternalRand::wrap_mut(rng))
 }
 
-/// Checks that `x` is in Z*_n
-#[inline(always)]
-pub fn in_mult_group(x: &Integer, n: &Integer) -> bool {
-    x.cmp0().is_ge() && in_mult_group_abs(x, n)
-}
-
-/// Checks that `abs(x)` is in Z*_n
-#[inline(always)]
-pub fn in_mult_group_abs(x: &Integer, n: &Integer) -> bool {
-    x.gcd_ref(n).complete() == *Integer::ONE
-}
-
-/// Samples `x` in Z*_n
+/// Samples a random element from `Z*_n` (uniform rejection sampling).
 pub fn sample_in_mult_group(rng: &mut impl RngCore, n: &Integer) -> Integer {
-    let mut rng = external_rand(rng);
-    let mut x = Integer::new();
     loop {
-        x.assign(n.random_below_ref(&mut rng));
+        let x = random_below(rng, n);
         if in_mult_group(&x, n) {
             return x;
         }
     }
 }
 
-/// Samples with size = bits
+/// Returns a random non-negative `Integer` with exactly `bits` significant
+/// bits (the top bit is set).
 pub fn sample_with_size(rng: &mut impl RngCore, bits: u32) -> Integer {
-    let mut rng = external_rand(rng);
-    let mut x = Integer::new();
+    debug_assert!(bits > 0);
 
-    x.assign(Integer::random_bits(bits, &mut rng));
+    // Ensure the highest bit (bits - 1) is set so that the resulting number has exactly
+    // `bits` significant bits. Fill the remaining lower bits with random data.
+    let mut x = Integer::ZERO;
 
-    // make sure the number size is `bits`
-    x.set_bit(bits - 1, true);
+    // Set the most-significant bit first.
+    x.set_bit((bits - 1) as u64);
+
+    // Populate the remaining bits with randomness.
+    for i in 0..(bits - 1) {
+        if rng.next_u32() & 1 == 1 {
+            x.set_bit(i as u64);
+        }
+    }
 
     x
 }
 
-/// Samples an odd integer with size = bits
+/// Same as [`sample_with_size`] but forces the result to be odd.
+#[inline]
 pub fn sample_odd_with_size(rng: &mut impl RngCore, bits: u32) -> Integer {
     let mut x = sample_with_size(rng, bits);
-
-    // make sure the number is odd
-    x.set_bit(0, true);
-
+    if x.even() {
+        x += &Integer::ONE;
+    }
     x
 }
 
-/// Check if `x` is a prime
-pub fn is_prime(x: &Integer) -> bool {
-    use rug::integer::IsPrime;
-
-    // make sure the number is odd
-    if !x.is_odd() {
+/// Very simple (non-cryptographic) primality test: trial division by a list of
+/// small primes and a deterministic Miller-Rabin for 64-bit bases.  **Not
+/// suitable for production cryptography**, but good enough for unit tests.
+pub fn is_prime(n: &Integer) -> bool {
+    // handle small numbers quickly
+    if *n <= 1u32 {
+        return false;
+    }
+    if n == &Integer::from(2u32) {
+        return true;
+    }
+    if n.even() {
         return false;
     }
 
-    // make sure x does not divide any of the small primes
-    for &small_prime in &small_primes::SMALL_PRIMES[0..small_primes::SMALL_PRIMES.len()] {
-        if Integer::from(small_prime) >= *x {
-            break;
-        }
+    const SMALL_PRIMES: &[u32] = &[
+        3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89,
+        97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181,
+        191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281,
+        283, 293, 307, 311, 313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 379, 383, 389, 397,
+        401, 409, 419, 421, 431, 433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503,
+        509, 521, 523, 541,
+    ];
 
-        let mod_result = x.mod_u(small_prime);
-        if mod_result == Integer::ZERO {
+    for &p in SMALL_PRIMES {
+        if n == &Integer::from(p) {
+            return true;
+        }
+        let rem = n % &Integer::from(p);
+        if rem == Integer::ZERO {
             return false;
         }
     }
 
-    // 25 taken same as one used in mpz_nextprime
-    if let IsPrime::Yes | IsPrime::Probably = x.is_probably_prime(25) {
-        return true;
-    }
+    // simple deterministic Miller–Rabin bases for 64-bit range; for larger n it
+    // is only a probable prime check.
+    const MR_BASES: &[u32] = &[2, 3, 5, 7, 11];
 
-    false
+    let d = {
+        let mut d = n - &Integer::ONE;
+        let mut s = 0u32;
+        while d.even() {
+            d >>= 1u32;
+            s += 1;
+        }
+        (d, s)
+    };
+
+    let (d, s) = d;
+    'outer: for &a in MR_BASES {
+        if Integer::from(a) >= *n {
+            continue;
+        }
+        let mut x = super::integer_ext::mod_pow_int(&Integer::from(a), &d, n);
+        if x == Integer::ONE || x == n - &Integer::ONE {
+            continue 'outer;
+        }
+        let mut r = 1;
+        while r < s {
+            x = (&x * &x) % n;
+            if x == n - &Integer::ONE {
+                continue 'outer;
+            }
+            r += 1;
+        }
+        return false;
+    }
+    true
 }
 
-/// Validate aech pair of elements in vector is coprime
+/// Returns `true` if every pair in `v` is coprime.
 pub fn check_coprime(v: &[&Integer]) -> bool {
     for i in 0..v.len() {
         for j in (i + 1)..v.len() {
-            if v[i].gcd_ref(v[j]).complete() != *Integer::ONE {
+            if v[i]
+                .unsigned_abs_ref()
+                .gcd(v[j].unsigned_abs_ref())
+                .significant_bits()
+                != 1
+            {
                 return false;
             }
         }
@@ -113,236 +186,25 @@ pub fn check_coprime(v: &[&Integer]) -> bool {
     true
 }
 
-/// Generates a random safe prime
+/// Generates a (probable) safe prime of size `bits`.
 pub fn generate_safe_prime(rng: &mut impl RngCore, bits: u32) -> Integer {
-    sieve_generate_safe_primes(rng, bits, 135)
-}
-
-/// Generate a random safe prime with a given sieve parameter.
-///
-/// For different bit sizes, different parameter value will give fastest
-/// generation, the higher bit size - the higher the sieve parameter.
-/// The best way to select the parameter is by trial. The one used by
-/// [`generate_safe_prime`] is indistinguishable from optimal for 500-1700 bit
-/// lengths.
-pub fn sieve_generate_safe_primes(rng: &mut impl RngCore, bits: u32, amount: usize) -> Integer {
-    use rug::integer::IsPrime;
-
-    let amount = amount.min(small_primes::SMALL_PRIMES.len());
-    let mut rng = external_rand(rng);
-    let mut x = Integer::new();
-
-    'trial: loop {
-        // generate an odd number of length `bits - 2`
-        x.assign(Integer::random_bits(bits - 1, &mut rng));
-        // `random_bits` is guaranteed to not set `bits-1`-th bit, but not
-        // guaranteed to set the `bits-2`-th
-        x.set_bit(bits - 2, true);
-        x |= 1u32;
-
-        for &small_prime in &small_primes::SMALL_PRIMES[0..amount] {
-            if small_prime >= x {
-                break;
-            }
-            let mod_result = x.mod_u(small_prime);
-            if mod_result == (small_prime - 1) / 2 {
-                continue 'trial;
-            }
+    loop {
+        let q = sample_odd_with_size(rng, bits - 1);
+        if !is_prime(&q) {
+            continue;
         }
-
-        // 25 taken same as one used in mpz_nextprime
-        if let IsPrime::Yes | IsPrime::Probably = x.is_probably_prime(25) {
-            x <<= 1;
-            x += 1;
-            if let IsPrime::Yes | IsPrime::Probably = x.is_probably_prime(25) {
-                return x;
-            }
+        let p = Integer::from(2u32) * &q + &Integer::ONE;
+        if is_prime(&p) {
+            return p;
         }
     }
 }
 
-/// Faster algorithm for modular exponentiation based on Chinese remainder theorem when modulo factorization is known
-///
-/// `CrtExp` makes exponentation modulo `n` faster when factorization `n = n1 * n2` is known as well as `phi(n1)` and `phi(n2)`
-/// (note that `n1` and `n2` don't need to be primes). In this case, you can [build](Self::build) a `CrtExp` and use provided
-/// [exponentiation algorithm](Self::exp).
-#[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct CrtExp {
-    n: Integer,
-    n1: Integer,
-    phi_n1: Integer,
-    n2: Integer,
-    phi_n2: Integer,
-    beta: Integer,
+/// Same as [`generate_safe_prime`] but allows specifying a dummy sieve parameter
+/// for compatibility. The parameter is ignored in this implementation.
+#[inline]
+pub fn sieve_generate_safe_primes(rng: &mut impl RngCore, bits: u32, _amount: usize) -> Integer {
+    generate_safe_prime(rng, bits)
 }
 
-/// Exponent for [modular exponentiation](CrtExp::exp) via [`CrtExp`]
-#[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Exponent {
-    e_mod_phi_pp: Integer,
-    e_mod_phi_qq: Integer,
-    is_negative: bool,
-}
 
-impl CrtExp {
-    /// Builds a `CrtExp` for exponentation modulo `n = n1 * n2`
-    ///
-    /// `phi_n1 = phi(n1)` and `phi_n2 = phi(n2)` need to be known. For instance, if `p` is a prime,
-    /// then `phi(p) = p - 1` and `phi(p^2) = p * (p - 1)`.
-    ///
-    /// [`CrtExp::build_n`] and [`CrtExp::build_nn`] can be used when `n1` and `n2` are primes or
-    /// square of primes.
-    pub fn build(n1: Integer, phi_n1: Integer, n2: Integer, phi_n2: Integer) -> Option<Self> {
-        if n1.cmp0().is_le()
-            || n2.cmp0().is_le()
-            || phi_n1.cmp0().is_le()
-            || phi_n2.cmp0().is_le()
-            || phi_n1 >= n1
-            || phi_n2 >= n2
-        {
-            return None;
-        }
-
-        let beta = n1.invert_ref(&n2)?.into();
-        Some(Self {
-            n: (&n1 * &n2).complete(),
-            n1,
-            phi_n1,
-            n2,
-            phi_n2,
-            beta,
-        })
-    }
-
-    /// Builds a `CrtExp` for exponentiation modulo `n = p * q` where `p`, `q` are primes
-    pub fn build_n(p: &Integer, q: &Integer) -> Option<Self> {
-        let phi_p = (p - 1u8).complete();
-        let phi_q = (q - 1u8).complete();
-        Self::build(p.clone(), phi_p, q.clone(), phi_q)
-    }
-
-    /// Builds a `CrtExp` for exponentiation modulo `nn = (p * q)^2` where `p`, `q` are primes
-    pub fn build_nn(p: &Integer, q: &Integer) -> Option<Self> {
-        let pp = p.square_ref().complete();
-        let qq = q.square_ref().complete();
-        let phi_pp = (&pp - p).complete();
-        let phi_qq = (&qq - q).complete();
-        Self::build(pp, phi_pp, qq, phi_qq)
-    }
-
-    /// Prepares exponent to perform [modular exponentiation](Self::exp)
-    pub fn prepare_exponent(&self, e: &Integer) -> Exponent {
-        let neg_e = (-e).complete();
-        let is_negative = e.cmp0().is_lt();
-        let e = if is_negative { &neg_e } else { e };
-        let e_mod_phi_pp = e.modulo_ref(&self.phi_n1).complete();
-        let e_mod_phi_qq = e.modulo_ref(&self.phi_n2).complete();
-        Exponent {
-            e_mod_phi_pp,
-            e_mod_phi_qq,
-            is_negative,
-        }
-    }
-
-    /// Performs exponentiation modulo `n`
-    ///
-    /// Exponent needs to be output of [`CrtExp::prepare_exponent`]
-    pub fn exp(&self, x: &Integer, e: &Exponent) -> Option<Integer> {
-        let s1 = x.modulo_ref(&self.n1).complete();
-        let s2 = x.modulo_ref(&self.n2).complete();
-
-        // `e_mod_phi_pp` and `e_mod_phi_qq` are guaranteed to be non-negative by construction
-        #[allow(clippy::expect_used)]
-        let r1 = s1
-            .pow_mod(&e.e_mod_phi_pp, &self.n1)
-            .expect("exponent is guaranteed to be non-negative");
-        #[allow(clippy::expect_used)]
-        let r2 = s2
-            .pow_mod(&e.e_mod_phi_qq, &self.n2)
-            .expect("exponent is guaranteed to be non-negative");
-
-        let result = ((r2 - &r1) * &self.beta).modulo(&self.n2) * &self.n1 + &r1;
-
-        if e.is_negative {
-            result.invert(&self.n).ok()
-        } else {
-            Some(result)
-        }
-    }
-}
-
-impl fmt::Debug for CrtExp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // CRT likely contains secret data (such as factorization) so we make sure none of it
-        // is leaked through `fmt::Debug`
-        f.write_str("CrtExp")
-    }
-}
-
-impl fmt::Debug for Exponent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Exponent may contain secret data, so we make sure none of it is leaked through
-        // `fmt::Debug`
-        f.write_str("CrtExponent")
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use rug::Integer;
-    use std::vec;
-
-    #[test]
-    fn safe_prime_size() {
-        let mut rng = rand_dev::DevRng::new();
-        for size in [10, 500, 512, 513, 514, 2048] {
-            let mut prime = super::generate_safe_prime(&mut rng, size);
-            // rug doesn't have bit length operations, so
-            prime >>= size - 1;
-            assert_eq!(&prime, rug::Integer::ONE);
-        }
-    }
-
-    #[test]
-    fn sample_with_size() {
-        let mut rng = rand_dev::DevRng::new();
-        for size in [799, 1279, 3455] {
-            let integer = super::sample_with_size(&mut rng, size);
-
-            // make sure the number size is `bits`
-            // rug doesn't have bit length operations, so
-            assert_eq!(integer.significant_bits(), size);
-        }
-    }
-
-    #[test]
-    fn sample_odd_with_size() {
-        let mut rng = rand_dev::DevRng::new();
-        for size in [799, 1279, 3455] {
-            let odd = super::sample_odd_with_size(&mut rng, size);
-
-            // make sure the number size is `bits`
-            // rug doesn't have bit length operations, so
-            assert_eq!(odd.significant_bits(), size);
-
-            // make sure the number is odd
-            assert_eq!(odd.is_odd(), true);
-        }
-    }
-
-    #[test]
-    fn test_coprime() {
-        let a = Integer::from(3);
-        let b = Integer::from(4);
-        let c = Integer::from(5);
-        let vec = vec![&a, &b, &c];
-
-        assert_eq!(super::check_coprime(&vec), true);
-
-        let d = Integer::from(6);
-        let vec = vec![&a, &b, &c, &d];
-        assert_eq!(super::check_coprime(&vec), false);
-    }
-}
