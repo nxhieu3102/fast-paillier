@@ -1,6 +1,7 @@
 //! Various utilities
 
-mod serde_wrapper;
+/// Serde wrapper for BigInt
+pub mod serde_wrapper;
 mod small_primes;
 
 use num_bigint::Sign;

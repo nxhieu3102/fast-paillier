@@ -1,0 +1,17 @@
+n,Protocol,Original (ms),Optimized (ms),Improvement (%)
+3,Non-threshold DKG,3.83,5.01,-30.8%
+5,Non-threshold DKG,5.89,5.75,2.4%
+7,Non-threshold DKG,8.15,8.06,1.1%
+10,Non-threshold DKG,11.75,11.47,2.4%
+3,Threshold DKG,11.14,16.23,-45.7%
+5,Threshold DKG,35.58,28.43,20.1%
+7,Threshold DKG,55.72,55.06,1.2%
+10,Threshold DKG,110.60,109.68,0.8%
+3,Auxiliary data generation,6080.00,6130.00,-0.8%
+5,Auxiliary data generation,9320.00,9360.00,-0.4%
+7,Auxiliary data generation,12450.00,12640.00,-1.5%
+10,Auxiliary data generation,18090.00,17450.00,3.5%
+3,Signing protocol,928.87,700.96,24.5%
+5,Signing protocol,1830.00,1410.00,23.0%
+7,Signing protocol,2770.00,2040.00,26.4%
+10,Signing protocol,4540.00,3030.00,33.3%

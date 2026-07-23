@@ -1,0 +1,5 @@
+n,Protocol,Mock Baseline (ms),New Optimized (ms),Improvement (%)
+7,Non-threshold DKG,9.40,9.30,1.1%
+7,Threshold DKG,61.61,60.87,1.2%
+7,Auxiliary data generation,803566.50,815620.00,-1.5%
+7,Signing protocol,122350.54,90050.00,26.4%

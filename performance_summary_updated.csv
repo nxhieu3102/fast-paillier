@@ -1,0 +1,17 @@
+n,Protocol,Original (ms),Optimized (ms),Improvement (%)
+3,Threshold DKG,15.66,16.23,-3.6%
+5,Threshold DKG,28.93,28.43,1.7%
+7,Threshold DKG,55.06,55.06,0.0%
+10,Threshold DKG,120.18,109.68,8.7%
+3,Auxiliary data generation protocol,6610.00,6130.00,7.3%
+5,Auxiliary data generation protocol,9310.00,9360.00,-0.5%
+7,Auxiliary data generation protocol,15760.00,12640.00,19.8%
+10,Auxiliary data generation protocol,N/A,17450.00,N/A
+3,Threshold signing protocol,975.52,378.05,61.2%
+5,Threshold signing protocol,1430.00,1040.00,27.3%
+7,Threshold signing protocol,2900.00,2050.00,29.3%
+10,Threshold signing protocol,N/A,2710.00,N/A
+3,Hierarchical threshold signing protocol,507.80,382.04,24.8%
+5,Hierarchical threshold signing protocol,1910.00,1380.00,27.7%
+7,Hierarchical threshold signing protocol,3040.00,2050.00,32.6%
+10,Hierarchical threshold signing protocol,N/A,2380.00,N/A

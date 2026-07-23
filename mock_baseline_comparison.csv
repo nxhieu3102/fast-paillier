@@ -1,0 +1,7 @@
+n,Protocol,Mock Baseline (ms),New Optimized (ms),Applied Improvement (%)
+3,Threshold signing protocol,71486.40,30280.00,57.6%
+5,Threshold signing protocol,73422.18,56290.00,23.3%
+7,Threshold signing protocol,124048.04,90050.00,27.4%
+3,Hierarchical threshold signing protocol,17096.12,13490.00,21.1%
+5,Hierarchical threshold signing protocol,44156.93,33410.00,24.3%
+7,Hierarchical threshold signing protocol,108480.56,74330.00,31.5%
